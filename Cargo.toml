@@ -7,4 +7,3 @@ edition = "2021"
 
 [dependencies]
 peroxide = { version = "0.34.1", features = ["parquet"] }
-typed-arena = "2.0.2"

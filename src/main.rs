@@ -1,22 +1,24 @@
 use revad::*;
+use std::f64::consts::PI;
 
-// Example usage:
+// Example usage: sin(x)^2 * y
 fn main() {
     let mut graph = Graph::default();
 
-    let x_index = graph.add_var(2.0);
-    let y_index = graph.add_var(3.0);
+    let x = graph.add_var(PI / 2f64);
+    let y = graph.add_var(2.0);
 
-    let sum_index = graph.add_add(x_index, y_index);
-    let product_index = graph.add_multiply(x_index, sum_index);
+    let expr_1 = graph.add_sin(x);
+    let expr_2 = graph.add_multiply(expr_1, expr_1);
+    let expr = graph.add_multiply(expr_2, y);
 
-    let result = graph.forward(product_index);
+    let result = graph.forward(expr);
     println!("Result: {}", result);
 
-    graph.backward(product_index, 1.0);
+    graph.backward(expr, 1.0);
 
-    let gradient_x = graph.get_gradient(x_index);
-    let gradient_y = graph.get_gradient(y_index);
+    let gradient_x = graph.get_gradient(x);
+    let gradient_y = graph.get_gradient(y);
     println!("Gradient x: {}", gradient_x);
     println!("Gradient y: {}", gradient_y);
 }
