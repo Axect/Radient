@@ -12,6 +12,8 @@ enum Node {
     Var(usize),        // Index in the value buffer
     Add(usize, usize), // Indices of the left and right operands
     Addf(f64, usize),
+    Sub(usize, usize),
+    Subf(usize, f64),
     Mul(usize, usize),
     Mulf(f64, usize),
     Div(usize, usize),
@@ -75,6 +77,7 @@ impl Graph {
     impl_unary_op!(tanh);
 
     impl_binary_op!(add);
+    impl_binary_op!(sub);
     impl_binary_op!(mul);
     impl_binary_op!(div);
     impl_binary_op!(pow);
@@ -84,6 +87,14 @@ impl Graph {
         self.value_buffer.push(None);
         self.gradients.push(0.0);
         self.nodes.push(Node::Addf(num, right));
+        index
+    }
+
+    pub fn subf(&mut self, left: usize, num: f64) -> usize {
+        let index = self.nodes.len();
+        self.value_buffer.push(None);
+        self.gradients.push(0.0);
+        self.nodes.push(Node::Subf(left, num));
         index
     }
 
@@ -120,7 +131,11 @@ impl Graph {
                     Node::Add(left_index, right_index) => {
                         self.forward(left_index) + self.forward(right_index)
                     }
+                    Node::Sub(left_index, right_index) => {
+                        self.forward(left_index) - self.forward(right_index)
+                    }
                     Node::Addf(num, right_index) => num + self.forward(right_index),
+                    Node::Subf(left_index, num) => self.forward(left_index) - num,
                     Node::Mul(left_index, right_index) => {
                         self.forward(left_index) * self.forward(right_index)
                     }
@@ -169,6 +184,13 @@ impl Graph {
             }
             Node::Addf(_, right_index) => {
                 self.backward(right_index, upstream_gradient);
+            }
+            Node::Sub(left_index, right_index) => {
+                self.backward(left_index, upstream_gradient);
+                self.backward(right_index, -upstream_gradient);
+            }
+            Node::Subf(left_index, _) => {
+                self.backward(left_index, upstream_gradient);
             }
             Node::Mul(left_index, right_index) => {
                 let left_val = self.forward(left_index);
@@ -280,6 +302,8 @@ pub enum Expr {
     Symbol(usize),
     Add(Box<Expr>, Box<Expr>),
     Addf(f64, Box<Expr>),
+    Sub(Box<Expr>, Box<Expr>),
+    Subf(Box<Expr>, f64),
     Mul(Box<Expr>, Box<Expr>),
     Mulf(f64, Box<Expr>),
     Div(Box<Expr>, Box<Expr>),
@@ -359,6 +383,54 @@ impl std::ops::Add<f64> for &Expr {
 
     fn add(self, rhs: f64) -> Self::Output {
         Expr::Addf(rhs, Box::new(self.clone()))
+    }
+}
+
+impl std::ops::Sub for Expr {
+    type Output = Expr;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Expr::Sub(Box::new(self), Box::new(rhs))
+    }
+}
+
+impl std::ops::Sub for &Expr {
+    type Output = Expr;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Expr::Sub(Box::new(self.clone()), Box::new(rhs.clone()))
+    }
+}
+
+impl std::ops::Sub<Expr> for f64 {
+    type Output = Expr;
+
+    fn sub(self, rhs: Expr) -> Self::Output {
+        Expr::Neg(Box::new(Expr::Subf(Box::new(rhs), self)))
+    }
+}
+
+impl std::ops::Sub<f64> for Expr {
+    type Output = Expr;
+
+    fn sub(self, rhs: f64) -> Self::Output {
+        Expr::Subf(Box::new(self), rhs)
+    }
+}
+
+impl std::ops::Sub<&Expr> for f64 {
+    type Output = Expr;
+
+    fn sub(self, rhs: &Expr) -> Self::Output {
+        Expr::Subf(Box::new(rhs.clone()), self)
+    }
+}
+
+impl std::ops::Sub<f64> for &Expr {
+    type Output = Expr;
+
+    fn sub(self, rhs: f64) -> Self::Output {
+        Expr::Subf(Box::new(self.clone()), rhs)
     }
 }
 
@@ -508,6 +580,15 @@ pub fn parse_expr(expr: Expr, graph: &mut Graph) -> usize {
         Expr::Addf(num, right) => {
             let right_index = parse_expr(*right, graph);
             graph.addf(num, right_index)
+        }
+        Expr::Sub(left, right) => {
+            let left_index = parse_expr(*left, graph);
+            let right_index = parse_expr(*right, graph);
+            graph.sub(left_index, right_index)
+        }
+        Expr::Subf(left, num) => {
+            let left_index = parse_expr(*left, graph);
+            graph.subf(left_index, num)
         }
         Expr::Mul(left, right) => {
             let left_index = parse_expr(*left, graph);
