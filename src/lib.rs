@@ -262,7 +262,7 @@ impl Graph {
             }
             Node::Exp(operand_index) => {
                 let operand_val = self.forward(operand_index);
-                self.backward(operand_index, operand_val * upstream_gradient);
+                self.backward(operand_index, operand_val.exp() * upstream_gradient);
             }
             Node::Ln(operand_index) => {
                 let operand_val = self.forward(operand_index);
