@@ -1,3 +1,5 @@
+use std::ops::{Add, Div, Mul, Neg, Sub};
+
 use casey::pascal;
 use peroxide::traits::num::{ExpLogOps, PowOps, TrigOps};
 
@@ -322,7 +324,7 @@ pub enum Expr {
     Tanh(Box<Expr>),
 }
 
-impl std::ops::Neg for Expr {
+impl Neg for Expr {
     type Output = Expr;
 
     fn neg(self) -> Self::Output {
@@ -330,7 +332,7 @@ impl std::ops::Neg for Expr {
     }
 }
 
-impl std::ops::Neg for &Expr {
+impl Neg for &Expr {
     type Output = Expr;
 
     fn neg(self) -> Self::Output {
@@ -338,7 +340,7 @@ impl std::ops::Neg for &Expr {
     }
 }
 
-impl std::ops::Add for Expr {
+impl Add for Expr {
     type Output = Expr;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -346,7 +348,7 @@ impl std::ops::Add for Expr {
     }
 }
 
-impl std::ops::Add for &Expr {
+impl Add for &Expr {
     type Output = Expr;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -354,7 +356,7 @@ impl std::ops::Add for &Expr {
     }
 }
 
-impl std::ops::Add<Expr> for f64 {
+impl Add<Expr> for f64 {
     type Output = Expr;
 
     fn add(self, rhs: Expr) -> Self::Output {
@@ -362,7 +364,7 @@ impl std::ops::Add<Expr> for f64 {
     }
 }
 
-impl std::ops::Add<f64> for Expr {
+impl Add<f64> for Expr {
     type Output = Expr;
 
     fn add(self, rhs: f64) -> Self::Output {
@@ -370,7 +372,7 @@ impl std::ops::Add<f64> for Expr {
     }
 }
 
-impl std::ops::Add<&Expr> for f64 {
+impl Add<&Expr> for f64 {
     type Output = Expr;
 
     fn add(self, rhs: &Expr) -> Self::Output {
@@ -378,7 +380,7 @@ impl std::ops::Add<&Expr> for f64 {
     }
 }
 
-impl std::ops::Add<f64> for &Expr {
+impl Add<f64> for &Expr {
     type Output = Expr;
 
     fn add(self, rhs: f64) -> Self::Output {
@@ -386,7 +388,7 @@ impl std::ops::Add<f64> for &Expr {
     }
 }
 
-impl std::ops::Sub for Expr {
+impl Sub for Expr {
     type Output = Expr;
 
     fn sub(self, rhs: Self) -> Self::Output {
@@ -394,7 +396,7 @@ impl std::ops::Sub for Expr {
     }
 }
 
-impl std::ops::Sub for &Expr {
+impl Sub for &Expr {
     type Output = Expr;
 
     fn sub(self, rhs: Self) -> Self::Output {
@@ -402,7 +404,7 @@ impl std::ops::Sub for &Expr {
     }
 }
 
-impl std::ops::Sub<Expr> for f64 {
+impl Sub<Expr> for f64 {
     type Output = Expr;
 
     fn sub(self, rhs: Expr) -> Self::Output {
@@ -410,7 +412,7 @@ impl std::ops::Sub<Expr> for f64 {
     }
 }
 
-impl std::ops::Sub<f64> for Expr {
+impl Sub<f64> for Expr {
     type Output = Expr;
 
     fn sub(self, rhs: f64) -> Self::Output {
@@ -418,7 +420,7 @@ impl std::ops::Sub<f64> for Expr {
     }
 }
 
-impl std::ops::Sub<&Expr> for f64 {
+impl Sub<&Expr> for f64 {
     type Output = Expr;
 
     fn sub(self, rhs: &Expr) -> Self::Output {
@@ -426,7 +428,7 @@ impl std::ops::Sub<&Expr> for f64 {
     }
 }
 
-impl std::ops::Sub<f64> for &Expr {
+impl Sub<f64> for &Expr {
     type Output = Expr;
 
     fn sub(self, rhs: f64) -> Self::Output {
@@ -434,7 +436,7 @@ impl std::ops::Sub<f64> for &Expr {
     }
 }
 
-impl std::ops::Mul for Expr {
+impl Mul for Expr {
     type Output = Expr;
 
     fn mul(self, rhs: Self) -> Self::Output {
@@ -442,7 +444,7 @@ impl std::ops::Mul for Expr {
     }
 }
 
-impl std::ops::Mul for &Expr {
+impl Mul for &Expr {
     type Output = Expr;
 
     fn mul(self, rhs: Self) -> Self::Output {
@@ -450,7 +452,39 @@ impl std::ops::Mul for &Expr {
     }
 }
 
-impl std::ops::Div for Expr {
+impl Mul<Expr> for f64 {
+    type Output = Expr;
+
+    fn mul(self, rhs: Expr) -> Self::Output {
+        Expr::Mulf(self, Box::new(rhs))
+    }
+}
+
+impl Mul<f64> for Expr {
+    type Output = Expr;
+
+    fn mul(self, rhs: f64) -> Self::Output {
+        Expr::Mulf(rhs, Box::new(self))
+    }
+}
+
+impl Mul<&Expr> for f64 {
+    type Output = Expr;
+
+    fn mul(self, rhs: &Expr) -> Self::Output {
+        Expr::Mulf(self, Box::new(rhs.clone()))
+    }
+}
+
+impl Mul<f64> for &Expr {
+    type Output = Expr;
+
+    fn mul(self, rhs: f64) -> Self::Output {
+        Expr::Mulf(rhs, Box::new(self.clone()))
+    }
+}
+
+impl Div for Expr {
     type Output = Expr;
 
     fn div(self, rhs: Self) -> Self::Output {
@@ -458,7 +492,7 @@ impl std::ops::Div for Expr {
     }
 }
 
-impl std::ops::Div for &Expr {
+impl Div for &Expr {
     type Output = Expr;
 
     fn div(self, rhs: Self) -> Self::Output {
@@ -466,11 +500,35 @@ impl std::ops::Div for &Expr {
     }
 }
 
-impl std::ops::Div<Expr> for f64 {
+impl Div<Expr> for f64 {
     type Output = Expr;
 
     fn div(self, rhs: Expr) -> Self::Output {
         Expr::Recip(Box::new(rhs))
+    }
+}
+
+impl Div<f64> for Expr {
+    type Output = Expr;
+
+    fn div(self, rhs: f64) -> Self::Output {
+        self.mul(rhs.recip())
+    }
+}
+
+impl Div<&Expr> for f64 {
+    type Output = Expr;
+
+    fn div(self, rhs: &Expr) -> Self::Output {
+        Expr::Recip(Box::new(rhs.clone()))
+    }
+}
+
+impl Div<f64> for &Expr {
+    type Output = Expr;
+
+    fn div(self, rhs: f64) -> Self::Output {
+        self.mul(rhs.recip())
     }
 }
 

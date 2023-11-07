@@ -1,5 +1,5 @@
 use peroxide::fuga::{ExpLogOps, PowOps, TrigOps};
-use revad::*;
+use radient::*;
 
 // Example with symbol : ln(x + y) * tanh(x - y)^2
 fn main() {
