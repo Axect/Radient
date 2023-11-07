@@ -1,9 +1,10 @@
+use casey::pascal;
 use peroxide::traits::num::{ExpLogOps, PowOps, TrigOps};
 
 #[derive(Default)]
 pub struct Graph {
     gradients: Vec<f64>,
-    value_buffer: Vec<f64>,
+    value_buffer: Vec<Option<f64>>,
     nodes: Vec<Node>, // Added to store the nodes
 }
 
@@ -29,171 +30,132 @@ enum Node {
     Tanh(usize),
 }
 
+macro_rules! impl_unary_op {
+    ($name:ident) => {
+        pub fn $name(&mut self, operand: usize) -> usize {
+            let index = self.nodes.len();
+            self.value_buffer.push(None);
+            self.gradients.push(0.0);
+            self.nodes.push(pascal!(Node::$name)(operand));
+            index
+        }
+    };
+}
+
+macro_rules! impl_binary_op {
+    ($name:ident) => {
+        pub fn $name(&mut self, left: usize, right: usize) -> usize {
+            let index = self.nodes.len();
+            self.value_buffer.push(None);
+            self.gradients.push(0.0);
+            self.nodes.push(pascal!(Node::$name)(left, right));
+            index
+        }
+    };
+}
+
 impl Graph {
     pub fn var(&mut self, value: f64) -> usize {
         let index = self.value_buffer.len();
-        self.value_buffer.push(value);
+        self.value_buffer.push(Some(value));
         self.gradients.push(0.0);
         self.nodes.push(Node::Var(index));
         index // The index is used to refer to this variable
     }
 
-    pub fn add(&mut self, left: usize, right: usize) -> usize {
-        let index = self.nodes.len();
-        self.gradients.push(0.0);
-        self.nodes.push(Node::Add(left, right));
-        index
-    }
+    impl_unary_op!(neg);
+    impl_unary_op!(recip);
+    impl_unary_op!(exp);
+    impl_unary_op!(ln);
+    impl_unary_op!(sin);
+    impl_unary_op!(cos);
+    impl_unary_op!(tan);
+    impl_unary_op!(sinh);
+    impl_unary_op!(cosh);
+    impl_unary_op!(tanh);
+
+    impl_binary_op!(add);
+    impl_binary_op!(mul);
+    impl_binary_op!(div);
+    impl_binary_op!(pow);
 
     pub fn addf(&mut self, num: f64, right: usize) -> usize {
         let index = self.nodes.len();
+        self.value_buffer.push(None);
         self.gradients.push(0.0);
         self.nodes.push(Node::Addf(num, right));
         index
     }
 
-    pub fn mul(&mut self, left: usize, right: usize) -> usize {
-        let index = self.nodes.len();
-        self.gradients.push(0.0);
-        self.nodes.push(Node::Mul(left, right));
-        index
-    }
-
     pub fn mulf(&mut self, num: f64, right: usize) -> usize {
         let index = self.nodes.len();
+        self.value_buffer.push(None);
         self.gradients.push(0.0);
         self.nodes.push(Node::Mulf(num, right));
         index
     }
 
-    pub fn div(&mut self, left: usize, right: usize) -> usize {
+    pub fn powf(&mut self, operand: usize, power: f64) -> usize {
         let index = self.nodes.len();
+        self.value_buffer.push(None);
         self.gradients.push(0.0);
-        self.nodes.push(Node::Div(left, right));
+        self.nodes.push(Node::Powf(operand, power));
         index
     }
 
-    pub fn pow(&mut self, left: usize, right: usize) -> usize {
+    pub fn powi(&mut self, operand: usize, power: i32) -> usize {
         let index = self.nodes.len();
+        self.value_buffer.push(None);
         self.gradients.push(0.0);
-        self.nodes.push(Node::Pow(left, right));
+        self.nodes.push(Node::Powi(operand, power));
         index
     }
 
-    pub fn powf(&mut self, left: usize, right: f64) -> usize {
-        let index = self.nodes.len();
-        self.gradients.push(0.0);
-        self.nodes.push(Node::Powf(left, right));
-        index
-    }
-
-    pub fn powi(&mut self, left: usize, right: i32) -> usize {
-        let index = self.nodes.len();
-        self.gradients.push(0.0);
-        self.nodes.push(Node::Powi(left, right));
-        index
-    }
-
-    pub fn neg(&mut self, operand: usize) -> usize {
-        let index = self.nodes.len();
-        self.gradients.push(0.0);
-        self.nodes.push(Node::Neg(operand));
-        index
-    }
-
-    pub fn recip(&mut self, operand: usize) -> usize {
-        let index = self.nodes.len();
-        self.gradients.push(0.0);
-        self.nodes.push(Node::Recip(operand));
-        index
-    }
-
-    pub fn exp(&mut self, operand: usize) -> usize {
-        let index = self.nodes.len();
-        self.gradients.push(0.0);
-        self.nodes.push(Node::Exp(operand));
-        index
-    }
-
-    pub fn ln(&mut self, operand: usize) -> usize {
-        let index = self.nodes.len();
-        self.gradients.push(0.0);
-        self.nodes.push(Node::Ln(operand));
-        index
-    }
-
-    pub fn sin(&mut self, operand: usize) -> usize {
-        let index = self.nodes.len();
-        self.gradients.push(0.0);
-        self.nodes.push(Node::Sin(operand));
-        index
-    }
-
-    pub fn cos(&mut self, operand: usize) -> usize {
-        let index = self.nodes.len();
-        self.gradients.push(0.0);
-        self.nodes.push(Node::Cos(operand));
-        index
-    }
-
-    pub fn tan(&mut self, operand: usize) -> usize {
-        let index = self.nodes.len();
-        self.gradients.push(0.0);
-        self.nodes.push(Node::Tan(operand));
-        index
-    }
-
-    pub fn sinh(&mut self, operand: usize) -> usize {
-        let index = self.nodes.len();
-        self.gradients.push(0.0);
-        self.nodes.push(Node::Sinh(operand));
-        index
-    }
-
-    pub fn cosh(&mut self, operand: usize) -> usize {
-        let index = self.nodes.len();
-        self.gradients.push(0.0);
-        self.nodes.push(Node::Cosh(operand));
-        index
-    }
-
-    pub fn tanh(&mut self, operand: usize) -> usize {
-        let index = self.nodes.len();
-        self.gradients.push(0.0);
-        self.nodes.push(Node::Tanh(operand));
-        index
-    }
-
-    pub fn forward(&self, index: usize) -> f64 {
-        match self.nodes[index] {
-            Node::Var(value_index) => self.value_buffer[value_index],
-            Node::Add(left_index, right_index) => {
-                self.forward(left_index) + self.forward(right_index)
+    pub fn forward(&mut self, index: usize) -> f64 {
+        match self.value_buffer[index] {
+            Some(value) => value,
+            None => {
+                let result = match self.nodes[index] {
+                    Node::Var(_) => unreachable!(),
+                    Node::Add(left_index, right_index) => {
+                        self.forward(left_index) + self.forward(right_index)
+                    }
+                    Node::Addf(num, right_index) => num + self.forward(right_index),
+                    Node::Mul(left_index, right_index) => {
+                        self.forward(left_index) * self.forward(right_index)
+                    }
+                    Node::Mulf(num, right_index) => num * self.forward(right_index),
+                    Node::Div(left_index, right_index) => {
+                        self.forward(left_index) / self.forward(right_index)
+                    }
+                    Node::Pow(left_index, right_index) => {
+                        self.forward(left_index).powf(self.forward(right_index))
+                    }
+                    Node::Powf(operand_index, power) => self.forward(operand_index).powf(power),
+                    Node::Powi(operand_index, power) => self.forward(operand_index).powi(power),
+                    Node::Neg(operand_index) => -self.forward(operand_index),
+                    Node::Recip(operand_index) => 1.0 / self.forward(operand_index),
+                    Node::Exp(operand_index) => self.forward(operand_index).exp(),
+                    Node::Ln(operand_index) => self.forward(operand_index).ln(),
+                    Node::Sin(operand_index) => self.forward(operand_index).sin(),
+                    Node::Cos(operand_index) => self.forward(operand_index).cos(),
+                    Node::Tan(operand_index) => self.forward(operand_index).tan(),
+                    Node::Sinh(operand_index) => self.forward(operand_index).sinh(),
+                    Node::Cosh(operand_index) => self.forward(operand_index).cosh(),
+                    Node::Tanh(operand_index) => self.forward(operand_index).tanh(),
+                };
+                self.value_buffer[index] = Some(result);
+                result
             }
-            Node::Addf(num, right_index) => num + self.forward(right_index),
-            Node::Mul(left_index, right_index) => {
-                self.forward(left_index) * self.forward(right_index)
-            }
-            Node::Mulf(num, right_index) => num * self.forward(right_index),
-            Node::Div(left_index, right_index) => {
-                self.forward(left_index) / self.forward(right_index)
-            }
-            Node::Pow(left_index, right_index) => {
-                self.forward(left_index).powf(self.forward(right_index))
-            }
-            Node::Powf(operand_index, power) => self.forward(operand_index).powf(power),
-            Node::Powi(operand_index, power) => self.forward(operand_index).powi(power),
-            Node::Neg(operand_index) => -self.forward(operand_index),
-            Node::Recip(operand_index) => 1.0 / self.forward(operand_index),
-            Node::Exp(operand_index) => self.forward(operand_index).exp(),
-            Node::Ln(operand_index) => self.forward(operand_index).ln(),
-            Node::Sin(operand_index) => self.forward(operand_index).sin(),
-            Node::Cos(operand_index) => self.forward(operand_index).cos(),
-            Node::Tan(operand_index) => self.forward(operand_index).tan(),
-            Node::Sinh(operand_index) => self.forward(operand_index).sinh(),
-            Node::Cosh(operand_index) => self.forward(operand_index).cosh(),
-            Node::Tanh(operand_index) => self.forward(operand_index).tanh(),
         }
+    }
+
+    pub fn reset_values(&mut self) {
+        self.value_buffer.iter_mut().for_each(|x| *x = None);
+    }
+
+    pub fn reset_gradients(&mut self) {
+        self.gradients.iter_mut().for_each(|x| *x = 0.0);
     }
 
     pub fn backward(&mut self, index: usize, upstream_gradient: f64) {
