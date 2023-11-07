@@ -9,7 +9,7 @@ categories = ["science"]
 readme = "README.md"
 repository = "https://github.com/Axect/Radient"
 keywords = ["gradient", "automatic", "differentiation", "machine-learning"]
-exclude = ["src/bin", "src/main.rs", "src/history"]
+exclude = ["src/bin/", "src/main.rs", "src/history/", "examples/"]
 
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

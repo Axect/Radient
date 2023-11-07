@@ -54,5 +54,5 @@ use radient::*;
 
 ## License
 
-Radient is licensed under the Apache2.0 or MIT license - see the [LICENSE-Apache2.0](./LICENSE-Apache2.0) & [LICENSE-MIT](./LICENSE-MIT) file for details.
+Radient is licensed under the Apache2.0 or MIT license - see the [LICENSE-APACHE](./LICENSE-APACHE) & [LICENSE-MIT](./LICENSE-MIT) file for details.
 
