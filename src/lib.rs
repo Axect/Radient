@@ -1,3 +1,5 @@
+use peroxide::traits::num::{ExpLogOps, PowOps, TrigOps};
+
 #[derive(Default)]
 pub struct Graph {
     gradients: Vec<f64>,
@@ -6,14 +8,29 @@ pub struct Graph {
 }
 
 enum Node {
-    Var(usize),             // Index in the value buffer
-    Add(usize, usize),      // Indices of the left and right operands
-    Multiply(usize, usize), // Indices of the left and right operands
-    Sin(usize),             // Index of the operand
+    Var(usize),        // Index in the value buffer
+    Add(usize, usize), // Indices of the left and right operands
+    Addf(f64, usize),
+    Mul(usize, usize),
+    Mulf(f64, usize),
+    Div(usize, usize),
+    Pow(usize, usize),
+    Powf(usize, f64),
+    Powi(usize, i32),
+    Neg(usize),
+    Recip(usize), // Index of the operand
+    Exp(usize),
+    Ln(usize),
+    Sin(usize),
+    Cos(usize),
+    Tan(usize),
+    Sinh(usize),
+    Cosh(usize),
+    Tanh(usize),
 }
 
 impl Graph {
-    pub fn add_var(&mut self, value: f64) -> usize {
+    pub fn var(&mut self, value: f64) -> usize {
         let index = self.value_buffer.len();
         self.value_buffer.push(value);
         self.gradients.push(0.0);
@@ -21,24 +38,129 @@ impl Graph {
         index // The index is used to refer to this variable
     }
 
-    pub fn add_add(&mut self, left: usize, right: usize) -> usize {
+    pub fn add(&mut self, left: usize, right: usize) -> usize {
         let index = self.nodes.len();
         self.gradients.push(0.0);
         self.nodes.push(Node::Add(left, right));
         index
     }
 
-    pub fn add_multiply(&mut self, left: usize, right: usize) -> usize {
+    pub fn addf(&mut self, num: f64, right: usize) -> usize {
         let index = self.nodes.len();
         self.gradients.push(0.0);
-        self.nodes.push(Node::Multiply(left, right));
+        self.nodes.push(Node::Addf(num, right));
         index
     }
 
-    pub fn add_sin(&mut self, operand: usize) -> usize {
+    pub fn mul(&mut self, left: usize, right: usize) -> usize {
+        let index = self.nodes.len();
+        self.gradients.push(0.0);
+        self.nodes.push(Node::Mul(left, right));
+        index
+    }
+
+    pub fn mulf(&mut self, num: f64, right: usize) -> usize {
+        let index = self.nodes.len();
+        self.gradients.push(0.0);
+        self.nodes.push(Node::Mulf(num, right));
+        index
+    }
+
+    pub fn div(&mut self, left: usize, right: usize) -> usize {
+        let index = self.nodes.len();
+        self.gradients.push(0.0);
+        self.nodes.push(Node::Div(left, right));
+        index
+    }
+
+    pub fn pow(&mut self, left: usize, right: usize) -> usize {
+        let index = self.nodes.len();
+        self.gradients.push(0.0);
+        self.nodes.push(Node::Pow(left, right));
+        index
+    }
+
+    pub fn powf(&mut self, left: usize, right: f64) -> usize {
+        let index = self.nodes.len();
+        self.gradients.push(0.0);
+        self.nodes.push(Node::Powf(left, right));
+        index
+    }
+
+    pub fn powi(&mut self, left: usize, right: i32) -> usize {
+        let index = self.nodes.len();
+        self.gradients.push(0.0);
+        self.nodes.push(Node::Powi(left, right));
+        index
+    }
+
+    pub fn neg(&mut self, operand: usize) -> usize {
+        let index = self.nodes.len();
+        self.gradients.push(0.0);
+        self.nodes.push(Node::Neg(operand));
+        index
+    }
+
+    pub fn recip(&mut self, operand: usize) -> usize {
+        let index = self.nodes.len();
+        self.gradients.push(0.0);
+        self.nodes.push(Node::Recip(operand));
+        index
+    }
+
+    pub fn exp(&mut self, operand: usize) -> usize {
+        let index = self.nodes.len();
+        self.gradients.push(0.0);
+        self.nodes.push(Node::Exp(operand));
+        index
+    }
+
+    pub fn ln(&mut self, operand: usize) -> usize {
+        let index = self.nodes.len();
+        self.gradients.push(0.0);
+        self.nodes.push(Node::Ln(operand));
+        index
+    }
+
+    pub fn sin(&mut self, operand: usize) -> usize {
         let index = self.nodes.len();
         self.gradients.push(0.0);
         self.nodes.push(Node::Sin(operand));
+        index
+    }
+
+    pub fn cos(&mut self, operand: usize) -> usize {
+        let index = self.nodes.len();
+        self.gradients.push(0.0);
+        self.nodes.push(Node::Cos(operand));
+        index
+    }
+
+    pub fn tan(&mut self, operand: usize) -> usize {
+        let index = self.nodes.len();
+        self.gradients.push(0.0);
+        self.nodes.push(Node::Tan(operand));
+        index
+    }
+
+    pub fn sinh(&mut self, operand: usize) -> usize {
+        let index = self.nodes.len();
+        self.gradients.push(0.0);
+        self.nodes.push(Node::Sinh(operand));
+        index
+    }
+
+    pub fn cosh(&mut self, operand: usize) -> usize {
+        let index = self.nodes.len();
+        self.gradients.push(0.0);
+        self.nodes.push(Node::Cosh(operand));
+        index
+    }
+
+    pub fn tanh(&mut self, operand: usize) -> usize {
+        let index = self.nodes.len();
+        self.gradients.push(0.0);
+        self.nodes.push(Node::Tanh(operand));
         index
     }
 
@@ -48,10 +170,29 @@ impl Graph {
             Node::Add(left_index, right_index) => {
                 self.forward(left_index) + self.forward(right_index)
             }
-            Node::Multiply(left_index, right_index) => {
+            Node::Addf(num, right_index) => num + self.forward(right_index),
+            Node::Mul(left_index, right_index) => {
                 self.forward(left_index) * self.forward(right_index)
             }
+            Node::Mulf(num, right_index) => num * self.forward(right_index),
+            Node::Div(left_index, right_index) => {
+                self.forward(left_index) / self.forward(right_index)
+            }
+            Node::Pow(left_index, right_index) => {
+                self.forward(left_index).powf(self.forward(right_index))
+            }
+            Node::Powf(operand_index, power) => self.forward(operand_index).powf(power),
+            Node::Powi(operand_index, power) => self.forward(operand_index).powi(power),
+            Node::Neg(operand_index) => -self.forward(operand_index),
+            Node::Recip(operand_index) => 1.0 / self.forward(operand_index),
+            Node::Exp(operand_index) => self.forward(operand_index).exp(),
+            Node::Ln(operand_index) => self.forward(operand_index).ln(),
             Node::Sin(operand_index) => self.forward(operand_index).sin(),
+            Node::Cos(operand_index) => self.forward(operand_index).cos(),
+            Node::Tan(operand_index) => self.forward(operand_index).tan(),
+            Node::Sinh(operand_index) => self.forward(operand_index).sinh(),
+            Node::Cosh(operand_index) => self.forward(operand_index).cosh(),
+            Node::Tanh(operand_index) => self.forward(operand_index).tanh(),
         }
     }
 
@@ -64,15 +205,98 @@ impl Graph {
                 self.backward(left_index, upstream_gradient);
                 self.backward(right_index, upstream_gradient);
             }
-            Node::Multiply(left_index, right_index) => {
+            Node::Addf(_, right_index) => {
+                self.backward(right_index, upstream_gradient);
+            }
+            Node::Mul(left_index, right_index) => {
                 let left_val = self.forward(left_index);
                 let right_val = self.forward(right_index);
                 self.backward(left_index, right_val * upstream_gradient);
                 self.backward(right_index, left_val * upstream_gradient);
             }
+            Node::Mulf(num, right_index) => {
+                self.backward(right_index, num * upstream_gradient);
+            }
+            Node::Div(left_index, right_index) => {
+                let left_val = self.forward(left_index);
+                let right_val = self.forward(right_index);
+                self.backward(left_index, upstream_gradient / right_val);
+                self.backward(
+                    right_index,
+                    -upstream_gradient * left_val / right_val.powi(2),
+                );
+            }
+            Node::Pow(left_index, right_index) => {
+                let left_val = self.forward(left_index);
+                let right_val = self.forward(right_index);
+                self.backward(
+                    left_index,
+                    right_val * left_val.powf(right_val - 1.0) * upstream_gradient,
+                );
+                self.backward(
+                    right_index,
+                    left_val.ln() * left_val.powf(right_val - 1.0) * upstream_gradient,
+                );
+            }
+            Node::Powf(operand_index, power) => {
+                let operand_val = self.forward(operand_index);
+                self.backward(
+                    operand_index,
+                    power * operand_val.powf(power - 1.0) * upstream_gradient,
+                )
+            }
+            Node::Powi(operand_index, power) => {
+                let operand_val = self.forward(operand_index);
+                self.backward(
+                    operand_index,
+                    power as f64 * operand_val.powi(power - 1) * upstream_gradient,
+                )
+            }
+            Node::Neg(operand_index) => {
+                let operand_val = self.forward(operand_index);
+                self.backward(operand_index, -upstream_gradient * operand_val);
+            }
+            Node::Recip(operand_index) => {
+                let operand_val = self.forward(operand_index);
+                self.backward(operand_index, -upstream_gradient / operand_val.powi(2));
+            }
+            Node::Exp(operand_index) => {
+                let operand_val = self.forward(operand_index);
+                self.backward(operand_index, operand_val * upstream_gradient);
+            }
+            Node::Ln(operand_index) => {
+                let operand_val = self.forward(operand_index);
+                self.backward(operand_index, upstream_gradient / operand_val);
+            }
             Node::Sin(operand_index) => {
                 let operand_val = self.forward(operand_index);
                 self.backward(operand_index, operand_val.cos() * upstream_gradient);
+            }
+            Node::Cos(operand_index) => {
+                let operand_val = self.forward(operand_index);
+                self.backward(operand_index, -operand_val.sin() * upstream_gradient);
+            }
+            Node::Tan(operand_index) => {
+                let operand_val = self.forward(operand_index);
+                self.backward(
+                    operand_index,
+                    (1f64 + operand_val.tan().powi(2)) * upstream_gradient,
+                )
+            }
+            Node::Sinh(operand_index) => {
+                let operand_val = self.forward(operand_index);
+                self.backward(operand_index, operand_val.cosh() * upstream_gradient);
+            }
+            Node::Cosh(operand_index) => {
+                let operand_val = self.forward(operand_index);
+                self.backward(operand_index, operand_val.sinh() * upstream_gradient);
+            }
+            Node::Tanh(operand_index) => {
+                let operand_val = self.forward(operand_index);
+                self.backward(
+                    operand_index,
+                    (1f64 - operand_val.tanh().powi(2)) * upstream_gradient,
+                )
             }
         }
     }
@@ -81,35 +305,314 @@ impl Graph {
         self.gradients[var_index]
     }
 
-    // Method to create a multiplication operation
-    pub fn mul(&mut self, left: usize, right: usize) -> usize {
-        self.add_multiply(left, right)
-    }
-
-    // Method to create an addition operation
-    pub fn add(&mut self, left: usize, right: usize) -> usize {
-        self.add_add(left, right)
+    pub fn parse_expr(&mut self, expr: Expr) -> usize {
+        parse_expr(expr, self)
     }
 }
 
-// Define a macro to simplify expression building
-#[macro_export]
-macro_rules! expr {
-    // Create a new variable node from a literal value
-    ($graph:expr; val $value:expr) => {
-        $graph.add_var($value)
-    };
-    // Refer to an existing variable node by index
-    ($graph:expr; var $index:expr) => {
-        $index
-    };
-    // Create an add node from two sub-expressions
-    ($graph:expr; add $left:tt, $right:tt) => {
-        $graph.add_add(expr!($graph; $left), expr!($graph; $right))
-    };
-    // Create a multiply node from two sub-expressions
-    ($graph:expr; mul $left:tt, $right:tt) => {
-        $graph.add_multiply(expr!($graph; $left), expr!($graph; $right))
-    };
-    // Add more operations as needed
+// ┌──────────────────────────────────────────────────────────┐
+//  Symbol for generating Abstract Expressions
+// └──────────────────────────────────────────────────────────┘
+#[derive(Debug, Clone)]
+pub enum Expr {
+    Symbol(usize),
+    Add(Box<Expr>, Box<Expr>),
+    Addf(f64, Box<Expr>),
+    Mul(Box<Expr>, Box<Expr>),
+    Mulf(f64, Box<Expr>),
+    Div(Box<Expr>, Box<Expr>),
+    Pow(Box<Expr>, Box<Expr>),
+    Powf(Box<Expr>, f64),
+    Powi(Box<Expr>, i32),
+    Neg(Box<Expr>),
+    Recip(Box<Expr>),
+    Exp(Box<Expr>),
+    Ln(Box<Expr>),
+    Sin(Box<Expr>),
+    Cos(Box<Expr>),
+    Tan(Box<Expr>),
+    Sinh(Box<Expr>),
+    Cosh(Box<Expr>),
+    Tanh(Box<Expr>),
+}
+
+impl std::ops::Neg for Expr {
+    type Output = Expr;
+
+    fn neg(self) -> Self::Output {
+        Expr::Neg(Box::new(self))
+    }
+}
+
+impl std::ops::Neg for &Expr {
+    type Output = Expr;
+
+    fn neg(self) -> Self::Output {
+        Expr::Neg(Box::new(self.clone()))
+    }
+}
+
+impl std::ops::Add for Expr {
+    type Output = Expr;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Expr::Add(Box::new(self), Box::new(rhs))
+    }
+}
+
+impl std::ops::Add for &Expr {
+    type Output = Expr;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Expr::Add(Box::new(self.clone()), Box::new(rhs.clone()))
+    }
+}
+
+impl std::ops::Add<Expr> for f64 {
+    type Output = Expr;
+
+    fn add(self, rhs: Expr) -> Self::Output {
+        Expr::Addf(self, Box::new(rhs))
+    }
+}
+
+impl std::ops::Add<f64> for Expr {
+    type Output = Expr;
+
+    fn add(self, rhs: f64) -> Self::Output {
+        Expr::Addf(rhs, Box::new(self))
+    }
+}
+
+impl std::ops::Add<&Expr> for f64 {
+    type Output = Expr;
+
+    fn add(self, rhs: &Expr) -> Self::Output {
+        Expr::Addf(self, Box::new(rhs.clone()))
+    }
+}
+
+impl std::ops::Add<f64> for &Expr {
+    type Output = Expr;
+
+    fn add(self, rhs: f64) -> Self::Output {
+        Expr::Addf(rhs, Box::new(self.clone()))
+    }
+}
+
+impl std::ops::Mul for Expr {
+    type Output = Expr;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        Expr::Mul(Box::new(self), Box::new(rhs))
+    }
+}
+
+impl std::ops::Mul for &Expr {
+    type Output = Expr;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        Expr::Mul(Box::new(self.clone()), Box::new(rhs.clone()))
+    }
+}
+
+impl std::ops::Div for Expr {
+    type Output = Expr;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        Expr::Div(Box::new(self), Box::new(rhs))
+    }
+}
+
+impl std::ops::Div for &Expr {
+    type Output = Expr;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        Expr::Div(Box::new(self.clone()), Box::new(rhs.clone()))
+    }
+}
+
+impl std::ops::Div<Expr> for f64 {
+    type Output = Expr;
+
+    fn div(self, rhs: Expr) -> Self::Output {
+        Expr::Recip(Box::new(rhs))
+    }
+}
+
+impl TrigOps for Expr {
+    fn sin(&self) -> Self {
+        Expr::Sin(Box::new(self.clone()))
+    }
+
+    fn cos(&self) -> Self {
+        Expr::Cos(Box::new(self.clone()))
+    }
+
+    fn tan(&self) -> Self {
+        Expr::Tan(Box::new(self.clone()))
+    }
+
+    fn sinh(&self) -> Self {
+        Expr::Sinh(Box::new(self.clone()))
+    }
+
+    fn cosh(&self) -> Self {
+        Expr::Cosh(Box::new(self.clone()))
+    }
+
+    fn tanh(&self) -> Self {
+        Expr::Tanh(Box::new(self.clone()))
+    }
+
+    fn sin_cos(&self) -> (Self, Self) {
+        (
+            Expr::Sin(Box::new(self.clone())),
+            Expr::Cos(Box::new(self.clone())),
+        )
+    }
+
+    fn sinh_cosh(&self) -> (Self, Self) {
+        (
+            Expr::Sinh(Box::new(self.clone())),
+            Expr::Cosh(Box::new(self.clone())),
+        )
+    }
+
+    fn asin(&self) -> Self {
+        todo!()
+    }
+
+    fn acos(&self) -> Self {
+        todo!()
+    }
+
+    fn atan(&self) -> Self {
+        todo!()
+    }
+
+    fn asinh(&self) -> Self {
+        todo!()
+    }
+
+    fn acosh(&self) -> Self {
+        todo!()
+    }
+
+    fn atanh(&self) -> Self {
+        todo!()
+    }
+}
+
+impl PowOps for Expr {
+    fn pow(&self, rhs: Self) -> Self {
+        Expr::Pow(Box::new(self.clone()), Box::new(rhs))
+    }
+
+    fn powf(&self, rhs: f64) -> Self {
+        Expr::Powf(Box::new(self.clone()), rhs)
+    }
+
+    fn powi(&self, rhs: i32) -> Self {
+        Expr::Powi(Box::new(self.clone()), rhs)
+    }
+}
+
+impl ExpLogOps for Expr {
+    fn exp(&self) -> Self {
+        Expr::Exp(Box::new(self.clone()))
+    }
+
+    fn ln(&self) -> Self {
+        Expr::Ln(Box::new(self.clone()))
+    }
+
+    fn log(&self, _base: f64) -> Self {
+        todo!()
+    }
+}
+
+// ┌──────────────────────────────────────────────────────────┐
+//  Parsing Expr to Graph
+// └──────────────────────────────────────────────────────────┘
+pub fn parse_expr(expr: Expr, graph: &mut Graph) -> usize {
+    match expr {
+        Expr::Symbol(index) => index,
+        Expr::Add(left, right) => {
+            let left_index = parse_expr(*left, graph);
+            let right_index = parse_expr(*right, graph);
+            graph.add(left_index, right_index)
+        }
+        Expr::Addf(num, right) => {
+            let right_index = parse_expr(*right, graph);
+            graph.addf(num, right_index)
+        }
+        Expr::Mul(left, right) => {
+            let left_index = parse_expr(*left, graph);
+            let right_index = parse_expr(*right, graph);
+            graph.mul(left_index, right_index)
+        }
+        Expr::Mulf(num, right) => {
+            let right_index = parse_expr(*right, graph);
+            graph.mulf(num, right_index)
+        }
+        Expr::Div(left, right) => {
+            let left_index = parse_expr(*left, graph);
+            let right_index = parse_expr(*right, graph);
+            graph.div(left_index, right_index)
+        }
+        Expr::Pow(left, right) => {
+            let left_index = parse_expr(*left, graph);
+            let right_index = parse_expr(*right, graph);
+            graph.pow(left_index, right_index)
+        }
+        Expr::Powf(left, right) => {
+            let left_index = parse_expr(*left, graph);
+            graph.powf(left_index, right)
+        }
+        Expr::Powi(left, right) => {
+            let left_index = parse_expr(*left, graph);
+            graph.powi(left_index, right)
+        }
+        Expr::Neg(expr) => {
+            let index = parse_expr(*expr, graph);
+            graph.neg(index)
+        }
+        Expr::Recip(expr) => {
+            let index = parse_expr(*expr, graph);
+            graph.recip(index)
+        }
+        Expr::Exp(expr) => {
+            let index = parse_expr(*expr, graph);
+            graph.exp(index)
+        }
+        Expr::Ln(expr) => {
+            let index = parse_expr(*expr, graph);
+            graph.ln(index)
+        }
+        Expr::Sin(expr) => {
+            let index = parse_expr(*expr, graph);
+            graph.sin(index)
+        }
+        Expr::Cos(expr) => {
+            let index = parse_expr(*expr, graph);
+            graph.cos(index)
+        }
+        Expr::Tan(expr) => {
+            let index = parse_expr(*expr, graph);
+            graph.tan(index)
+        }
+        Expr::Sinh(expr) => {
+            let index = parse_expr(*expr, graph);
+            graph.sinh(index)
+        }
+        Expr::Cosh(expr) => {
+            let index = parse_expr(*expr, graph);
+            graph.cosh(index)
+        }
+        Expr::Tanh(expr) => {
+            let index = parse_expr(*expr, graph);
+            graph.tanh(index)
+        }
+    }
 }
