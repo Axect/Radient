@@ -1,7 +1,6 @@
-use std::ops::{Add, Div, Mul, Neg, Sub};
-
 use casey::pascal;
 use peroxide::traits::num::{ExpLogOps, PowOps, TrigOps};
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
 #[derive(Default)]
 pub struct Graph {
@@ -10,7 +9,7 @@ pub struct Graph {
     nodes: Vec<Node>, // Added to store the nodes
 }
 
-enum Node {
+pub enum Node {
     Var(usize),        // Index in the value buffer
     Add(usize, usize), // Indices of the left and right operands
     Addf(f64, usize),
