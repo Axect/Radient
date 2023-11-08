@@ -1,5 +1,5 @@
 use peroxide::fuga::{ExpLogOps, PowOps, TrigOps};
-use radient::*;
+use radient::prelude::*;
 
 // Example with symbol : ln(x + y) * tanh(x - y)^2
 fn main() {
@@ -11,7 +11,7 @@ fn main() {
     let y_sym = Expr::Symbol(y);
     let expr_sym = (&x_sym + &y_sym).ln() * (&x_sym - &y_sym).tanh().powi(2);
 
-    let expr = graph.parse_expr(expr_sym);
+    let expr = graph.compile(expr_sym);
 
     let result = graph.forward(expr);
     println!("Result: {}", result);
