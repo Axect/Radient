@@ -11,12 +11,12 @@ fn main() {
     let y_sym = Expr::Symbol(y);
     let expr_sym = (&x_sym + &y_sym).ln() * (&x_sym - &y_sym).tanh().powi(2);
 
-    let expr = graph.compile(expr_sym);
+    graph.compile(expr_sym);
 
-    let result = graph.forward(expr);
+    let result = graph.forward();
     println!("Result: {}", result);
 
-    graph.backward(expr, 1.0);
+    graph.backward();
     let gradient_x = graph.get_gradient(x);
     println!("Gradient x: {}", gradient_x);
 }

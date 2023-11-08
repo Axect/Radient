@@ -8,6 +8,7 @@ pub struct Graph {
     buffer: Vec<Option<f64>>,
     nodes: Vec<Node>, // Added to store the nodes
     value_ics: Vec<usize>,
+    compiled: Option<usize>,
 }
 
 pub enum Node {
@@ -68,6 +69,21 @@ impl Graph {
         index // The index is used to refer to this variable
     }
 
+    /// Declare n_vars variables (But not initialize them)
+    pub fn touch_vars(&mut self, n_vars: usize) {
+        let start_index = self.buffer.len();
+        self.buffer.resize(start_index + n_vars, None);
+        self.gradients.resize(start_index + n_vars, 0.0);
+        for i in 0..n_vars {
+            self.nodes.push(Node::Var(start_index + i));
+            self.value_ics.push(start_index + i);
+        }
+    }
+
+    pub fn get_var(&self, var_order: usize) -> usize {
+        self.value_ics[var_order]
+    }
+
     pub fn get_vars(&self) -> Vec<usize> {
         self.value_ics.clone()
     }
@@ -83,6 +99,17 @@ impl Graph {
         for (i, val) in value_ics.iter().zip(vals) {
             self.buffer[*i] = Some(*val);
         }
+    }
+
+    pub fn get_symbol(&self, var_order: usize) -> Expr {
+        Expr::Symbol(self.get_var(var_order))
+    }
+
+    pub fn get_symbols(&self) -> Vec<Expr> {
+        self.get_vars()
+            .iter()
+            .map(|x| Expr::Symbol(*x))
+            .collect::<Vec<_>>()
     }
 
     // Implement the unary operators
@@ -144,42 +171,42 @@ impl Graph {
         index
     }
 
-    pub fn forward(&mut self, index: usize) -> f64 {
+    pub fn forward_step(&mut self, index: usize) -> f64 {
         match self.buffer[index] {
             Some(value) => value,
             None => {
                 let result = match self.nodes[index] {
                     Node::Var(_) => unreachable!(),
                     Node::Add(left_index, right_index) => {
-                        self.forward(left_index) + self.forward(right_index)
+                        self.forward_step(left_index) + self.forward_step(right_index)
                     }
                     Node::Sub(left_index, right_index) => {
-                        self.forward(left_index) - self.forward(right_index)
+                        self.forward_step(left_index) - self.forward_step(right_index)
                     }
-                    Node::Addf(num, right_index) => num + self.forward(right_index),
-                    Node::Subf(left_index, num) => self.forward(left_index) - num,
+                    Node::Addf(num, right_index) => num + self.forward_step(right_index),
+                    Node::Subf(left_index, num) => self.forward_step(left_index) - num,
                     Node::Mul(left_index, right_index) => {
-                        self.forward(left_index) * self.forward(right_index)
+                        self.forward_step(left_index) * self.forward_step(right_index)
                     }
-                    Node::Mulf(num, right_index) => num * self.forward(right_index),
+                    Node::Mulf(num, right_index) => num * self.forward_step(right_index),
                     Node::Div(left_index, right_index) => {
-                        self.forward(left_index) / self.forward(right_index)
+                        self.forward_step(left_index) / self.forward_step(right_index)
                     }
                     Node::Pow(left_index, right_index) => {
-                        self.forward(left_index).powf(self.forward(right_index))
+                        self.forward_step(left_index).powf(self.forward_step(right_index))
                     }
-                    Node::Powf(operand_index, power) => self.forward(operand_index).powf(power),
-                    Node::Powi(operand_index, power) => self.forward(operand_index).powi(power),
-                    Node::Neg(operand_index) => -self.forward(operand_index),
-                    Node::Recip(operand_index) => 1.0 / self.forward(operand_index),
-                    Node::Exp(operand_index) => self.forward(operand_index).exp(),
-                    Node::Ln(operand_index) => self.forward(operand_index).ln(),
-                    Node::Sin(operand_index) => self.forward(operand_index).sin(),
-                    Node::Cos(operand_index) => self.forward(operand_index).cos(),
-                    Node::Tan(operand_index) => self.forward(operand_index).tan(),
-                    Node::Sinh(operand_index) => self.forward(operand_index).sinh(),
-                    Node::Cosh(operand_index) => self.forward(operand_index).cosh(),
-                    Node::Tanh(operand_index) => self.forward(operand_index).tanh(),
+                    Node::Powf(operand_index, power) => self.forward_step(operand_index).powf(power),
+                    Node::Powi(operand_index, power) => self.forward_step(operand_index).powi(power),
+                    Node::Neg(operand_index) => -self.forward_step(operand_index),
+                    Node::Recip(operand_index) => 1.0 / self.forward_step(operand_index),
+                    Node::Exp(operand_index) => self.forward_step(operand_index).exp(),
+                    Node::Ln(operand_index) => self.forward_step(operand_index).ln(),
+                    Node::Sin(operand_index) => self.forward_step(operand_index).sin(),
+                    Node::Cos(operand_index) => self.forward_step(operand_index).cos(),
+                    Node::Tan(operand_index) => self.forward_step(operand_index).tan(),
+                    Node::Sinh(operand_index) => self.forward_step(operand_index).sinh(),
+                    Node::Cosh(operand_index) => self.forward_step(operand_index).cosh(),
+                    Node::Tanh(operand_index) => self.forward_step(operand_index).tanh(),
                 };
                 self.buffer[index] = Some(result);
                 result
@@ -202,111 +229,111 @@ impl Graph {
         }
     }
 
-    pub fn backward(&mut self, index: usize, upstream_gradient: f64) {
+    pub fn backward_step(&mut self, index: usize, upstream_gradient: f64) {
         match self.nodes[index] {
             Node::Var(value_index) => {
                 self.gradients[value_index] += upstream_gradient;
             }
             Node::Add(left_index, right_index) => {
-                self.backward(left_index, upstream_gradient);
-                self.backward(right_index, upstream_gradient);
+                self.backward_step(left_index, upstream_gradient);
+                self.backward_step(right_index, upstream_gradient);
             }
             Node::Addf(_, right_index) => {
-                self.backward(right_index, upstream_gradient);
+                self.backward_step(right_index, upstream_gradient);
             }
             Node::Sub(left_index, right_index) => {
-                self.backward(left_index, upstream_gradient);
-                self.backward(right_index, -upstream_gradient);
+                self.backward_step(left_index, upstream_gradient);
+                self.backward_step(right_index, -upstream_gradient);
             }
             Node::Subf(left_index, _) => {
-                self.backward(left_index, upstream_gradient);
+                self.backward_step(left_index, upstream_gradient);
             }
             Node::Mul(left_index, right_index) => {
-                let left_val = self.forward(left_index);
-                let right_val = self.forward(right_index);
-                self.backward(left_index, right_val * upstream_gradient);
-                self.backward(right_index, left_val * upstream_gradient);
+                let left_val = self.forward_step(left_index);
+                let right_val = self.forward_step(right_index);
+                self.backward_step(left_index, right_val * upstream_gradient);
+                self.backward_step(right_index, left_val * upstream_gradient);
             }
             Node::Mulf(num, right_index) => {
-                self.backward(right_index, num * upstream_gradient);
+                self.backward_step(right_index, num * upstream_gradient);
             }
             Node::Div(left_index, right_index) => {
-                let left_val = self.forward(left_index);
-                let right_val = self.forward(right_index);
-                self.backward(left_index, upstream_gradient / right_val);
-                self.backward(
+                let left_val = self.forward_step(left_index);
+                let right_val = self.forward_step(right_index);
+                self.backward_step(left_index, upstream_gradient / right_val);
+                self.backward_step(
                     right_index,
                     -upstream_gradient * left_val / right_val.powi(2),
                 );
             }
             Node::Pow(left_index, right_index) => {
-                let left_val = self.forward(left_index);
-                let right_val = self.forward(right_index);
-                self.backward(
+                let left_val = self.forward_step(left_index);
+                let right_val = self.forward_step(right_index);
+                self.backward_step(
                     left_index,
                     right_val * left_val.powf(right_val - 1.0) * upstream_gradient,
                 );
-                self.backward(
+                self.backward_step(
                     right_index,
                     left_val.ln() * left_val.powf(right_val - 1.0) * upstream_gradient,
                 );
             }
             Node::Powf(operand_index, power) => {
-                let operand_val = self.forward(operand_index);
-                self.backward(
+                let operand_val = self.forward_step(operand_index);
+                self.backward_step(
                     operand_index,
                     power * operand_val.powf(power - 1.0) * upstream_gradient,
                 )
             }
             Node::Powi(operand_index, power) => {
-                let operand_val = self.forward(operand_index);
-                self.backward(
+                let operand_val = self.forward_step(operand_index);
+                self.backward_step(
                     operand_index,
                     power as f64 * operand_val.powi(power - 1) * upstream_gradient,
                 )
             }
             Node::Neg(operand_index) => {
-                let operand_val = self.forward(operand_index);
-                self.backward(operand_index, -upstream_gradient * operand_val);
+                let operand_val = self.forward_step(operand_index);
+                self.backward_step(operand_index, -upstream_gradient * operand_val);
             }
             Node::Recip(operand_index) => {
-                let operand_val = self.forward(operand_index);
-                self.backward(operand_index, -upstream_gradient / operand_val.powi(2));
+                let operand_val = self.forward_step(operand_index);
+                self.backward_step(operand_index, -upstream_gradient / operand_val.powi(2));
             }
             Node::Exp(operand_index) => {
-                let operand_val = self.forward(operand_index);
-                self.backward(operand_index, operand_val.exp() * upstream_gradient);
+                let operand_val = self.forward_step(operand_index);
+                self.backward_step(operand_index, operand_val.exp() * upstream_gradient);
             }
             Node::Ln(operand_index) => {
-                let operand_val = self.forward(operand_index);
-                self.backward(operand_index, upstream_gradient / operand_val);
+                let operand_val = self.forward_step(operand_index);
+                self.backward_step(operand_index, upstream_gradient / operand_val);
             }
             Node::Sin(operand_index) => {
-                let operand_val = self.forward(operand_index);
-                self.backward(operand_index, operand_val.cos() * upstream_gradient);
+                let operand_val = self.forward_step(operand_index);
+                self.backward_step(operand_index, operand_val.cos() * upstream_gradient);
             }
             Node::Cos(operand_index) => {
-                let operand_val = self.forward(operand_index);
-                self.backward(operand_index, -operand_val.sin() * upstream_gradient);
+                let operand_val = self.forward_step(operand_index);
+                self.backward_step(operand_index, -operand_val.sin() * upstream_gradient);
             }
             Node::Tan(operand_index) => {
-                let operand_val = self.forward(operand_index);
-                self.backward(
+                let operand_val = self.forward_step(operand_index);
+                self.backward_step(
                     operand_index,
                     (1f64 + operand_val.tan().powi(2)) * upstream_gradient,
                 )
             }
             Node::Sinh(operand_index) => {
-                let operand_val = self.forward(operand_index);
-                self.backward(operand_index, operand_val.cosh() * upstream_gradient);
+                let operand_val = self.forward_step(operand_index);
+                self.backward_step(operand_index, operand_val.cosh() * upstream_gradient);
             }
             Node::Cosh(operand_index) => {
-                let operand_val = self.forward(operand_index);
-                self.backward(operand_index, operand_val.sinh() * upstream_gradient);
+                let operand_val = self.forward_step(operand_index);
+                self.backward_step(operand_index, operand_val.sinh() * upstream_gradient);
             }
             Node::Tanh(operand_index) => {
-                let operand_val = self.forward(operand_index);
-                self.backward(
+                let operand_val = self.forward_step(operand_index);
+                self.backward_step(
                     operand_index,
                     (1f64 - operand_val.tanh().powi(2)) * upstream_gradient,
                 )
@@ -314,12 +341,35 @@ impl Graph {
         }
     }
 
-    pub fn get_gradient(&self, var_index: usize) -> f64 {
-        self.gradients[var_index]
+    pub fn get_gradient(&self, index: usize) -> f64 {
+        self.gradients[index]
     }
 
-    pub fn compile(&mut self, expr: Expr) -> usize {
-        parse_expr(expr, self)
+    pub fn get_gradients(&self) -> Vec<f64> {
+        let value_ics = self.get_vars();
+        value_ics.iter().map(|x| self.get_gradient(*x)).collect()
+    }
+
+    pub fn compile(&mut self, expr: Expr) {
+        self.compiled = Some(parse_expr(expr, self))
+    }
+
+    pub fn get_compiled(&self) -> Option<usize> {
+        self.compiled
+    }
+
+    pub fn forward(&mut self) -> f64 {
+        match self.compiled {
+            Some(idx) => self.forward_step(idx),
+            None => panic!("No compiled expression"),
+        }
+    }
+
+    pub fn backward(&mut self) {
+        match self.compiled {
+            Some(idx) => self.backward_step(idx, 1.0),
+            None => panic!("No compiled expression"),
+        }
     }
 }
 
