@@ -5,8 +5,9 @@ use std::ops::{Add, Div, Mul, Neg, Sub};
 #[derive(Default)]
 pub struct Graph {
     gradients: Vec<f64>,
-    value_buffer: Vec<Option<f64>>,
+    buffer: Vec<Option<f64>>,
     nodes: Vec<Node>, // Added to store the nodes
+    value_ics: Vec<usize>,
 }
 
 pub enum Node {
@@ -37,7 +38,7 @@ macro_rules! impl_unary_op {
     ($name:ident) => {
         pub fn $name(&mut self, operand: usize) -> usize {
             let index = self.nodes.len();
-            self.value_buffer.push(None);
+            self.buffer.push(None);
             self.gradients.push(0.0);
             self.nodes.push(pascal!(Node::$name)(operand));
             index
@@ -49,7 +50,7 @@ macro_rules! impl_binary_op {
     ($name:ident) => {
         pub fn $name(&mut self, left: usize, right: usize) -> usize {
             let index = self.nodes.len();
-            self.value_buffer.push(None);
+            self.buffer.push(None);
             self.gradients.push(0.0);
             self.nodes.push(pascal!(Node::$name)(left, right));
             index
@@ -59,11 +60,29 @@ macro_rules! impl_binary_op {
 
 impl Graph {
     pub fn var(&mut self, value: f64) -> usize {
-        let index = self.value_buffer.len();
-        self.value_buffer.push(Some(value));
+        let index = self.buffer.len();
+        self.buffer.push(Some(value));
         self.gradients.push(0.0);
         self.nodes.push(Node::Var(index));
+        self.value_ics.push(index);
         index // The index is used to refer to this variable
+    }
+
+    pub fn get_vars(&self) -> Vec<usize> {
+        self.value_ics.clone()
+    }
+
+    pub fn subs_var(&mut self, index: usize, value: f64) {
+        self.buffer[index] = Some(value);
+    }
+
+    pub fn subs_vars(&mut self, vals: &[f64]) {
+        let value_ics = &self.value_ics;
+        assert!(value_ics.len() >= vals.len());
+
+        for (i, val) in value_ics.iter().zip(vals) {
+            self.buffer[*i] = Some(*val);
+        }
     }
 
     // Implement the unary operators
@@ -87,7 +106,7 @@ impl Graph {
 
     pub fn addf(&mut self, num: f64, right: usize) -> usize {
         let index = self.nodes.len();
-        self.value_buffer.push(None);
+        self.buffer.push(None);
         self.gradients.push(0.0);
         self.nodes.push(Node::Addf(num, right));
         index
@@ -95,7 +114,7 @@ impl Graph {
 
     pub fn subf(&mut self, left: usize, num: f64) -> usize {
         let index = self.nodes.len();
-        self.value_buffer.push(None);
+        self.buffer.push(None);
         self.gradients.push(0.0);
         self.nodes.push(Node::Subf(left, num));
         index
@@ -103,7 +122,7 @@ impl Graph {
 
     pub fn mulf(&mut self, num: f64, right: usize) -> usize {
         let index = self.nodes.len();
-        self.value_buffer.push(None);
+        self.buffer.push(None);
         self.gradients.push(0.0);
         self.nodes.push(Node::Mulf(num, right));
         index
@@ -111,7 +130,7 @@ impl Graph {
 
     pub fn powf(&mut self, operand: usize, power: f64) -> usize {
         let index = self.nodes.len();
-        self.value_buffer.push(None);
+        self.buffer.push(None);
         self.gradients.push(0.0);
         self.nodes.push(Node::Powf(operand, power));
         index
@@ -119,14 +138,14 @@ impl Graph {
 
     pub fn powi(&mut self, operand: usize, power: i32) -> usize {
         let index = self.nodes.len();
-        self.value_buffer.push(None);
+        self.buffer.push(None);
         self.gradients.push(0.0);
         self.nodes.push(Node::Powi(operand, power));
         index
     }
 
     pub fn forward(&mut self, index: usize) -> f64 {
-        match self.value_buffer[index] {
+        match self.buffer[index] {
             Some(value) => value,
             None => {
                 let result = match self.nodes[index] {
@@ -162,18 +181,25 @@ impl Graph {
                     Node::Cosh(operand_index) => self.forward(operand_index).cosh(),
                     Node::Tanh(operand_index) => self.forward(operand_index).tanh(),
                 };
-                self.value_buffer[index] = Some(result);
+                self.buffer[index] = Some(result);
                 result
             }
         }
     }
 
-    pub fn reset_values(&mut self) {
-        self.value_buffer.iter_mut().for_each(|x| *x = None);
-    }
+    /// Reset values & gradients without variables
+    pub fn reset(&mut self) {
+        let except_ics = &self.value_ics;
+        let reset_ics = (0 .. self.buffer.len()).filter(|x| !except_ics.contains(x));
 
-    pub fn reset_gradients(&mut self) {
-        self.gradients.iter_mut().for_each(|x| *x = 0.0);
+        for i in reset_ics {
+            self.buffer[i] = None;
+            self.gradients[i] = 0.0;
+        }
+
+        for i in except_ics {
+            self.gradients[*i] = 0.0;
+        }
     }
 
     pub fn backward(&mut self, index: usize, upstream_gradient: f64) {

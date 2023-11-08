@@ -12,3 +12,15 @@ pub fn gradient<F: Fn(&[Expr]) -> Expr>(f: F, x: &[f64]) -> Vec<f64> {
 
     var_vec.iter().map(|x| graph.get_gradient(*x)).collect::<Vec<_>>()
 }
+
+/// graph is already compiled
+pub fn gradient_cached(g: &mut Graph, compiled_idx: usize, x: &[f64]) -> (f64, Vec<f64>) {
+    g.reset();
+    g.subs_vars(x);
+    let result = g.forward(compiled_idx);
+    g.backward(compiled_idx, 1.0);
+    let vars = g.get_vars();
+    let grads = vars.iter().map(|x| g.get_gradient(*x)).collect::<Vec<_>>();
+
+    (result, grads)
+}
