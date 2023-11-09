@@ -1,11 +1,11 @@
 use radient::prelude::*;
-use peroxide::fuga::*;
+use peroxide::fuga::{Uniform, RNG};
 
 fn main() {
     let u = Uniform(1, 5);
     let mut l = 0usize;
 
-    for _ in 0 .. 100000 {
+    for _ in 0..100000 {
         let value = u.sample(2);
         let gradient = gradient(f, &value);
         l += gradient.len();

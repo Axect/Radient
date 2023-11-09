@@ -1,5 +1,5 @@
 use radient::prelude::*;
-use peroxide::fuga::*;
+use peroxide::fuga::{Uniform, RNG};
 
 fn main() {
     let u = Uniform(1, 5);
@@ -11,7 +11,7 @@ fn main() {
     let expr = f(&symbols);
     graph.compile(expr);
 
-    for _ in 0 .. 100000 {
+    for _ in 0..100000 {
         let value = u.sample(2);
         let (_, grads) = gradient_cached(&mut graph, &value);
         l += grads.len();

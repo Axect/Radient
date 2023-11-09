@@ -1,19 +1,19 @@
 use casey::pascal;
-use peroxide::traits::num::{ExpLogOps, PowOps, TrigOps};
+use peroxide_num::{ExpLogOps, PowOps, TrigOps, Numeric, Ring};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 #[derive(Default)]
-pub struct Graph {
-    gradients: Vec<f64>,
-    buffer: Vec<Option<f64>>,
+pub struct Graph<T> {
+    gradients: Vec<T>,
+    buffer: Vec<Option<T>>,
     nodes: Vec<Node>, // Added to store the nodes
     value_ics: Vec<usize>,
     compiled: Option<usize>,
 }
 
 pub enum Node {
-    Var(usize),         // Index in the value buffer
-    Add(usize, usize),  // Indices of the left and right operands
+    Var(usize),        // Index in the value buffer
+    Add(usize, usize), // Indices of the left and right operands
     Addf(f64, usize),
     Sub(usize, usize),
     Subf(usize, f64),
@@ -23,7 +23,7 @@ pub enum Node {
     Pow(usize, usize),
     Powf(usize, f64),
     Powi(usize, i32),
-    Neg(usize),         // Index of the operand
+    Neg(usize), // Index of the operand
     Recip(usize),
     Exp(usize),
     Ln(usize),
@@ -36,11 +36,11 @@ pub enum Node {
 }
 
 macro_rules! impl_unary_op {
-    ($name:ident) => {
+    ($name:ident, $t:ty) => {
         pub fn $name(&mut self, operand: usize) -> usize {
             let index = self.nodes.len();
             self.buffer.push(None);
-            self.gradients.push(0.0);
+            self.gradients.push(<$t>::default());
             self.nodes.push(pascal!(Node::$name)(operand));
             index
         }
@@ -48,22 +48,22 @@ macro_rules! impl_unary_op {
 }
 
 macro_rules! impl_binary_op {
-    ($name:ident) => {
+    ($name:ident, $t:ty) => {
         pub fn $name(&mut self, left: usize, right: usize) -> usize {
             let index = self.nodes.len();
             self.buffer.push(None);
-            self.gradients.push(0.0);
+            self.gradients.push(<$t>::default());
             self.nodes.push(pascal!(Node::$name)(left, right));
             index
         }
     };
 }
 
-impl Graph {
-    pub fn var(&mut self, value: f64) -> usize {
+impl<T: Numeric<f64> + Default + Ring> Graph<T> where f64: Div<T, Output = T> {
+    pub fn var(&mut self, value: T) -> usize {
         let index = self.buffer.len();
         self.buffer.push(Some(value));
-        self.gradients.push(0.0);
+        self.gradients.push(T::default());
         self.nodes.push(Node::Var(index));
         self.value_ics.push(index);
         index // The index is used to refer to this variable
@@ -73,7 +73,7 @@ impl Graph {
     pub fn touch_vars(&mut self, n_vars: usize) {
         let start_index = self.buffer.len();
         self.buffer.resize(start_index + n_vars, None);
-        self.gradients.resize(start_index + n_vars, 0.0);
+        self.gradients.resize(start_index + n_vars, T::default());
         for i in 0..n_vars {
             self.nodes.push(Node::Var(start_index + i));
             self.value_ics.push(start_index + i);
@@ -88,16 +88,16 @@ impl Graph {
         self.value_ics.clone()
     }
 
-    pub fn subs_var(&mut self, index: usize, value: f64) {
+    pub fn subs_var(&mut self, index: usize, value: T) {
         self.buffer[index] = Some(value);
     }
 
-    pub fn subs_vars(&mut self, vals: &[f64]) {
+    pub fn subs_vars(&mut self, vals: &[T]) {
         let value_ics = &self.value_ics;
         assert!(value_ics.len() >= vals.len());
 
         for (i, val) in value_ics.iter().zip(vals) {
-            self.buffer[*i] = Some(*val);
+            self.buffer[*i] = Some(val.clone());
         }
     }
 
@@ -113,28 +113,28 @@ impl Graph {
     }
 
     // Implement the unary operators
-    impl_unary_op!(neg);
-    impl_unary_op!(recip);
-    impl_unary_op!(exp);
-    impl_unary_op!(ln);
-    impl_unary_op!(sin);
-    impl_unary_op!(cos);
-    impl_unary_op!(tan);
-    impl_unary_op!(sinh);
-    impl_unary_op!(cosh);
-    impl_unary_op!(tanh);
+    impl_unary_op!(neg, T);
+    impl_unary_op!(recip, T);
+    impl_unary_op!(exp, T);
+    impl_unary_op!(ln, T);
+    impl_unary_op!(sin, T);
+    impl_unary_op!(cos, T);
+    impl_unary_op!(tan, T);
+    impl_unary_op!(sinh, T);
+    impl_unary_op!(cosh, T);
+    impl_unary_op!(tanh, T);
 
     // Implement the binary operators
-    impl_binary_op!(add);
-    impl_binary_op!(sub);
-    impl_binary_op!(mul);
-    impl_binary_op!(div);
-    impl_binary_op!(pow);
+    impl_binary_op!(add, T);
+    impl_binary_op!(sub, T);
+    impl_binary_op!(mul, T);
+    impl_binary_op!(div, T);
+    impl_binary_op!(pow, T);
 
     pub fn addf(&mut self, num: f64, right: usize) -> usize {
         let index = self.nodes.len();
         self.buffer.push(None);
-        self.gradients.push(0.0);
+        self.gradients.push(T::default());
         self.nodes.push(Node::Addf(num, right));
         index
     }
@@ -142,7 +142,7 @@ impl Graph {
     pub fn subf(&mut self, left: usize, num: f64) -> usize {
         let index = self.nodes.len();
         self.buffer.push(None);
-        self.gradients.push(0.0);
+        self.gradients.push(T::default());
         self.nodes.push(Node::Subf(left, num));
         index
     }
@@ -150,7 +150,7 @@ impl Graph {
     pub fn mulf(&mut self, num: f64, right: usize) -> usize {
         let index = self.nodes.len();
         self.buffer.push(None);
-        self.gradients.push(0.0);
+        self.gradients.push(T::default());
         self.nodes.push(Node::Mulf(num, right));
         index
     }
@@ -158,7 +158,7 @@ impl Graph {
     pub fn powf(&mut self, operand: usize, power: f64) -> usize {
         let index = self.nodes.len();
         self.buffer.push(None);
-        self.gradients.push(0.0);
+        self.gradients.push(T::default());
         self.nodes.push(Node::Powf(operand, power));
         index
     }
@@ -166,14 +166,14 @@ impl Graph {
     pub fn powi(&mut self, operand: usize, power: i32) -> usize {
         let index = self.nodes.len();
         self.buffer.push(None);
-        self.gradients.push(0.0);
+        self.gradients.push(T::default());
         self.nodes.push(Node::Powi(operand, power));
         index
     }
 
-    pub fn forward_step(&mut self, index: usize) -> f64 {
-        match self.buffer[index] {
-            Some(value) => value,
+    pub fn forward_step(&mut self, index: usize) -> T {
+        match &self.buffer[index] {
+            Some(value) => value.clone(),
             None => {
                 let result = match self.nodes[index] {
                     Node::Var(_) => unreachable!(),
@@ -183,20 +183,24 @@ impl Graph {
                     Node::Sub(left_index, right_index) => {
                         self.forward_step(left_index) - self.forward_step(right_index)
                     }
-                    Node::Addf(num, right_index) => num + self.forward_step(right_index),
+                    Node::Addf(num, right_index) => self.forward_step(right_index) + num,
                     Node::Subf(left_index, num) => self.forward_step(left_index) - num,
                     Node::Mul(left_index, right_index) => {
                         self.forward_step(left_index) * self.forward_step(right_index)
                     }
-                    Node::Mulf(num, right_index) => num * self.forward_step(right_index),
+                    Node::Mulf(num, right_index) => self.forward_step(right_index) * num,
                     Node::Div(left_index, right_index) => {
                         self.forward_step(left_index) / self.forward_step(right_index)
                     }
-                    Node::Pow(left_index, right_index) => {
-                        self.forward_step(left_index).powf(self.forward_step(right_index))
+                    Node::Pow(left_index, right_index) => self
+                        .forward_step(left_index)
+                        .pow(self.forward_step(right_index)),
+                    Node::Powf(operand_index, power) => {
+                        self.forward_step(operand_index).powf(power)
                     }
-                    Node::Powf(operand_index, power) => self.forward_step(operand_index).powf(power),
-                    Node::Powi(operand_index, power) => self.forward_step(operand_index).powi(power),
+                    Node::Powi(operand_index, power) => {
+                        self.forward_step(operand_index).powi(power)
+                    }
                     Node::Neg(operand_index) => -self.forward_step(operand_index),
                     Node::Recip(operand_index) => 1.0 / self.forward_step(operand_index),
                     Node::Exp(operand_index) => self.forward_step(operand_index).exp(),
@@ -208,7 +212,7 @@ impl Graph {
                     Node::Cosh(operand_index) => self.forward_step(operand_index).cosh(),
                     Node::Tanh(operand_index) => self.forward_step(operand_index).tanh(),
                 };
-                self.buffer[index] = Some(result);
+                self.buffer[index] = Some(result.clone());
                 result
             }
         }
@@ -217,32 +221,32 @@ impl Graph {
     /// Reset values & gradients without variables
     pub fn reset(&mut self) {
         let except_ics = &self.value_ics;
-        let reset_ics = (0 .. self.buffer.len()).filter(|x| !except_ics.contains(x));
+        let reset_ics = (0..self.buffer.len()).filter(|x| !except_ics.contains(x));
 
         for i in reset_ics {
             self.buffer[i] = None;
-            self.gradients[i] = 0.0;
+            self.gradients[i] = T::default();
         }
 
         for i in except_ics {
-            self.gradients[*i] = 0.0;
+            self.gradients[*i] = T::default();
         }
     }
 
-    pub fn backward_step(&mut self, index: usize, upstream_gradient: f64) {
+    pub fn backward_step(&mut self, index: usize, upstream_gradient: T) {
         match self.nodes[index] {
             Node::Var(value_index) => {
-                self.gradients[value_index] += upstream_gradient;
+                self.gradients[value_index] = self.gradients[value_index].clone() + upstream_gradient;
             }
             Node::Add(left_index, right_index) => {
-                self.backward_step(left_index, upstream_gradient);
+                self.backward_step(left_index, upstream_gradient.clone());
                 self.backward_step(right_index, upstream_gradient);
             }
             Node::Addf(_, right_index) => {
                 self.backward_step(right_index, upstream_gradient);
             }
             Node::Sub(left_index, right_index) => {
-                self.backward_step(left_index, upstream_gradient);
+                self.backward_step(left_index, upstream_gradient.clone());
                 self.backward_step(right_index, -upstream_gradient);
             }
             Node::Subf(left_index, _) => {
@@ -251,16 +255,16 @@ impl Graph {
             Node::Mul(left_index, right_index) => {
                 let left_val = self.forward_step(left_index);
                 let right_val = self.forward_step(right_index);
-                self.backward_step(left_index, right_val * upstream_gradient);
+                self.backward_step(left_index, right_val * upstream_gradient.clone());
                 self.backward_step(right_index, left_val * upstream_gradient);
             }
             Node::Mulf(num, right_index) => {
-                self.backward_step(right_index, num * upstream_gradient);
+                self.backward_step(right_index, upstream_gradient * num);
             }
             Node::Div(left_index, right_index) => {
                 let left_val = self.forward_step(left_index);
                 let right_val = self.forward_step(right_index);
-                self.backward_step(left_index, upstream_gradient / right_val);
+                self.backward_step(left_index, upstream_gradient.clone() / right_val.clone());
                 self.backward_step(
                     right_index,
                     -upstream_gradient * left_val / right_val.powi(2),
@@ -271,25 +275,25 @@ impl Graph {
                 let right_val = self.forward_step(right_index);
                 self.backward_step(
                     left_index,
-                    right_val * left_val.powf(right_val - 1.0) * upstream_gradient,
+                    right_val.clone() * left_val.pow(right_val.clone() - 1.0) * upstream_gradient.clone(),
                 );
                 self.backward_step(
                     right_index,
-                    left_val.ln() * left_val.powf(right_val - 1.0) * upstream_gradient,
+                    left_val.ln() * left_val.pow(right_val - 1.0) * upstream_gradient,
                 );
             }
             Node::Powf(operand_index, power) => {
                 let operand_val = self.forward_step(operand_index);
                 self.backward_step(
                     operand_index,
-                    power * operand_val.powf(power - 1.0) * upstream_gradient,
+                    operand_val.powf(power - 1f64) * upstream_gradient * power,
                 )
             }
             Node::Powi(operand_index, power) => {
                 let operand_val = self.forward_step(operand_index);
                 self.backward_step(
                     operand_index,
-                    power as f64 * operand_val.powi(power - 1) * upstream_gradient,
+                    operand_val.powi(power - 1) * upstream_gradient * power as f64,
                 )
             }
             Node::Neg(operand_index) => {
@@ -320,7 +324,7 @@ impl Graph {
                 let operand_val = self.forward_step(operand_index);
                 self.backward_step(
                     operand_index,
-                    (1f64 + operand_val.tan().powi(2)) * upstream_gradient,
+                    (operand_val.tan().powi(2) + 1f64) * upstream_gradient,
                 )
             }
             Node::Sinh(operand_index) => {
@@ -335,17 +339,17 @@ impl Graph {
                 let operand_val = self.forward_step(operand_index);
                 self.backward_step(
                     operand_index,
-                    (1f64 - operand_val.tanh().powi(2)) * upstream_gradient,
+                    (-(operand_val.tanh().powi(2) - 1f64)) * upstream_gradient,
                 )
             }
         }
     }
 
-    pub fn get_gradient(&self, index: usize) -> f64 {
-        self.gradients[index]
+    pub fn get_gradient(&self, index: usize) -> T {
+        self.gradients[index].clone()
     }
 
-    pub fn get_gradients(&self) -> Vec<f64> {
+    pub fn get_gradients(&self) -> Vec<T> {
         let value_ics = self.get_vars();
         value_ics.iter().map(|x| self.get_gradient(*x)).collect()
     }
@@ -358,7 +362,7 @@ impl Graph {
         self.compiled
     }
 
-    pub fn forward(&mut self) -> f64 {
+    pub fn forward(&mut self) -> T {
         match self.compiled {
             Some(idx) => self.forward_step(idx),
             None => panic!("No compiled expression"),
@@ -367,7 +371,7 @@ impl Graph {
 
     pub fn backward(&mut self) {
         match self.compiled {
-            Some(idx) => self.backward_step(idx, 1.0),
+            Some(idx) => self.backward_step(idx, T::one()),
             None => panic!("No compiled expression"),
         }
     }
@@ -641,13 +645,6 @@ impl TrigOps for Expr {
         )
     }
 
-    fn sinh_cosh(&self) -> (Self, Self) {
-        (
-            Expr::Sinh(Box::new(self.clone())),
-            Expr::Cosh(Box::new(self.clone())),
-        )
-    }
-
     fn asin(&self) -> Self {
         todo!()
     }
@@ -674,6 +671,8 @@ impl TrigOps for Expr {
 }
 
 impl PowOps for Expr {
+    type Float = f64;
+
     fn pow(&self, rhs: Self) -> Self {
         Expr::Pow(Box::new(self.clone()), Box::new(rhs))
     }
@@ -685,9 +684,15 @@ impl PowOps for Expr {
     fn powi(&self, rhs: i32) -> Self {
         Expr::Powi(Box::new(self.clone()), rhs)
     }
+
+    fn sqrt(&self) -> Self {
+        Expr::Powf(Box::new(self.clone()), 0.5)
+    }
 }
 
 impl ExpLogOps for Expr {
+    type Float = f64;
+
     fn exp(&self) -> Self {
         Expr::Exp(Box::new(self.clone()))
     }
@@ -699,12 +704,22 @@ impl ExpLogOps for Expr {
     fn log(&self, _base: f64) -> Self {
         todo!()
     }
+
+    fn log2(&self) -> Self {
+        todo!()
+    }
+
+    fn log10(&self) -> Self {
+        todo!()
+    }
 }
+
+impl Numeric<f64> for Expr {}
 
 // ┌──────────────────────────────────────────────────────────┐
 //  Parsing Expr to Graph
 // └──────────────────────────────────────────────────────────┘
-pub fn parse_expr(expr: Expr, graph: &mut Graph) -> usize {
+pub fn parse_expr<T: Numeric<f64> + Default + Ring>(expr: Expr, graph: &mut Graph<T>) -> usize where f64: Div<T, Output = T> {
     match expr {
         Expr::Symbol(index) => index,
         Expr::Add(left, right) => {

@@ -14,6 +14,10 @@ exclude = ["src/bin/", "src/main.rs", "src/history/", "examples/"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[dev-dependencies]
+peroxide = "0.34"
+
 [dependencies]
 casey = "0.4"
-peroxide = "0.34"
+peroxide-num = "0.1"
+
