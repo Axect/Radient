@@ -1,4 +1,3 @@
-use peroxide::fuga::{ExpLogOps, PowOps, TrigOps};
 use radient::prelude::*;
 
 // Example with symbol : ln(x + y) * tanh(x - y)^2

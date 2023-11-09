@@ -1,17 +1,9 @@
 use radient::prelude::*;
-use peroxide::fuga::{Uniform, RNG};
 
 fn main() {
-    let u = Uniform(1, 5);
-    let mut l = 0usize;
-
-    for _ in 0..100000 {
-        let value = u.sample(2);
-        let gradient = gradient(f, &value);
-        l += gradient.len();
-    }
-
-    println!("{}", l);
+    let value = vec![2f64, 1f64];
+    let (result, gradient) = gradient(f, &value);
+    println!("result: {}, gradient: {:?}", result, gradient);
 }
 
 fn f(x_vec: &[Expr]) -> Expr {

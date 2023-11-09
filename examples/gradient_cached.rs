@@ -1,23 +1,17 @@
 use radient::prelude::*;
-use peroxide::fuga::{Uniform, RNG};
 
 fn main() {
-    let u = Uniform(1, 5);
-    let mut l = 0usize;
-
+    // Compile the graph
     let mut graph = Graph::default();
     graph.touch_vars(2);
     let symbols = graph.get_symbols();
     let expr = f(&symbols);
     graph.compile(expr);
 
-    for _ in 0..100000 {
-        let value = u.sample(2);
-        let (_, grads) = gradient_cached(&mut graph, &value);
-        l += grads.len();
-    }
+    let value = vec![2f64, 1f64];
+    let (result, grads) = gradient_cached(&mut graph, &value);
 
-    println!("{}", l);
+    println!("result: {}, gradient: {:?}", result, grads);
 }
 
 fn f(x_vec: &[Expr]) -> Expr {
