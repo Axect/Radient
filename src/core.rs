@@ -1,5 +1,6 @@
 use casey::pascal;
 use peroxide_num::{ExpLogOps, PowOps, TrigOps, Numeric, Ring};
+use peroxide::structure::matrix::{Matrix, matrix};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 #[derive(Default)]
@@ -33,6 +34,8 @@ pub enum Node {
     Sinh(usize),
     Cosh(usize),
     Tanh(usize),
+    Sigmoid(usize),
+    ReLU(usize),
 }
 
 macro_rules! impl_unary_op {
@@ -59,7 +62,7 @@ macro_rules! impl_binary_op {
     };
 }
 
-impl<T: Numeric<f64> + Default + Ring> Graph<T> where f64: Div<T, Output = T> {
+impl<T: Numeric<f64> + Default + Ring + ActivationFunction> Graph<T> where f64: Div<T, Output = T> {
     pub fn var(&mut self, value: T) -> usize {
         let index = self.buffer.len();
         self.buffer.push(Some(value));
@@ -123,6 +126,7 @@ impl<T: Numeric<f64> + Default + Ring> Graph<T> where f64: Div<T, Output = T> {
     impl_unary_op!(sinh, T);
     impl_unary_op!(cosh, T);
     impl_unary_op!(tanh, T);
+    impl_unary_op!(sigmoid, T);
 
     // Implement the binary operators
     impl_binary_op!(add, T);
@@ -171,6 +175,14 @@ impl<T: Numeric<f64> + Default + Ring> Graph<T> where f64: Div<T, Output = T> {
         index
     }
 
+    pub fn relu(&mut self, operand: usize) -> usize {
+        let index = self.nodes.len();
+        self.buffer.push(None);
+        self.gradients.push(T::default());
+        self.nodes.push(Node::ReLU(operand));
+        index
+    }
+
     pub fn forward_step(&mut self, index: usize) -> T {
         match &self.buffer[index] {
             Some(value) => value.clone(),
@@ -211,6 +223,8 @@ impl<T: Numeric<f64> + Default + Ring> Graph<T> where f64: Div<T, Output = T> {
                     Node::Sinh(operand_index) => self.forward_step(operand_index).sinh(),
                     Node::Cosh(operand_index) => self.forward_step(operand_index).cosh(),
                     Node::Tanh(operand_index) => self.forward_step(operand_index).tanh(),
+                    Node::Sigmoid(operand_index) => self.forward_step(operand_index).sigmoid(),
+                    Node::ReLU(operand_index) => self.forward_step(operand_index).relu(),
                 };
                 self.buffer[index] = Some(result.clone());
                 result
@@ -342,6 +356,18 @@ impl<T: Numeric<f64> + Default + Ring> Graph<T> where f64: Div<T, Output = T> {
                     (-(operand_val.tanh().powi(2) - 1f64)) * upstream_gradient,
                 )
             }
+            Node::Sigmoid(operand_index) => {
+                let operand_val = self.forward_step(operand_index).sigmoid();
+                let diff_from_one = -operand_val.clone() + 1f64;
+                self.backward_step(
+                    operand_index,
+                    operand_val * diff_from_one * upstream_gradient,
+                )
+            }
+            Node::ReLU(operand_index) => {
+                let operand_val = self.forward_step(operand_index).heaviside_zero();
+                self.backward_step(operand_index, upstream_gradient * operand_val);
+            }
         }
     }
 
@@ -403,6 +429,8 @@ pub enum Expr {
     Sinh(Box<Expr>),
     Cosh(Box<Expr>),
     Tanh(Box<Expr>),
+    Sigmoid(Box<Expr>),
+    ReLU(Box<Expr>),
 }
 
 impl Neg for Expr {
@@ -716,10 +744,65 @@ impl ExpLogOps for Expr {
 
 impl Numeric<f64> for Expr {}
 
+pub trait ActivationFunction {
+    fn sigmoid(&self) -> Self;
+    fn relu(&self) -> Self;
+    fn heaviside_zero(&self) -> Self;
+}
+
+impl ActivationFunction for f64 {
+    fn sigmoid(&self) -> Self {
+        1.0 / (1.0 + (-self).exp())
+    }
+
+    fn relu(&self) -> Self {
+        self.max(0.0)
+    }
+
+    fn heaviside_zero(&self) -> Self {
+        if self.is_sign_positive() {
+            1.0
+        } else {
+            0.0
+        }
+    }
+}
+
+impl ActivationFunction for Expr {
+    fn sigmoid(&self) -> Self {
+        Expr::Sigmoid(Box::new(self.clone()))
+    }
+
+    fn relu(&self) -> Self {
+        Expr::ReLU(Box::new(self.clone()))
+    }
+
+    fn heaviside_zero(&self) -> Self {
+        unimplemented!()
+    }
+}
+
+impl ActivationFunction for Matrix {
+    fn sigmoid(&self) -> Self {
+        let data = self.data.iter().map(|x| x.sigmoid()).collect();
+        matrix(data, self.row, self.col, self.shape)
+    }
+
+    fn relu(&self) -> Self {
+        let data = self.data.iter().map(|x| x.relu()).collect();
+        matrix(data, self.row, self.col, self.shape)
+    }
+
+    fn heaviside_zero(&self) -> Self {
+        let data = self.data.iter().map(|x| x.heaviside_zero()).collect();
+        matrix(data, self.row, self.col, self.shape)
+    }
+}
+
 // ┌──────────────────────────────────────────────────────────┐
 //  Parsing Expr to Graph
 // └──────────────────────────────────────────────────────────┘
-pub fn parse_expr<T: Numeric<f64> + Default + Ring>(expr: Expr, graph: &mut Graph<T>) -> usize where f64: Div<T, Output = T> {
+pub fn parse_expr<T: Numeric<f64> + Default + Ring + ActivationFunction>(expr: Expr, graph: &mut Graph<T>) -> usize where f64: Div<T, Output = T> {
     match expr {
         Expr::Symbol(index) => index,
         Expr::Add(left, right) => {
@@ -806,6 +889,14 @@ pub fn parse_expr<T: Numeric<f64> + Default + Ring>(expr: Expr, graph: &mut Grap
         Expr::Tanh(expr) => {
             let index = parse_expr(*expr, graph);
             graph.tanh(index)
+        }
+        Expr::Sigmoid(expr) => {
+            let index = parse_expr(*expr, graph);
+            graph.sigmoid(index)
+        }
+        Expr::ReLU(expr) => {
+            let index = parse_expr(*expr, graph);
+            graph.relu(index)
         }
     }
 }

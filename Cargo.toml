@@ -20,4 +20,4 @@ peroxide = "0.34"
 [dependencies]
 casey = "0.4"
 peroxide-num = "0.1"
-
+peroxide = "0.34"
