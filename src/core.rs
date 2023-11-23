@@ -1,6 +1,6 @@
 use casey::pascal;
-use peroxide_num::{ExpLogOps, PowOps, TrigOps, Numeric, Ring};
-use peroxide::structure::matrix::{Matrix, matrix};
+use peroxide::structure::matrix::{matrix, Matrix};
+use peroxide_num::{ExpLogOps, Numeric, PowOps, Ring, TrigOps};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 #[derive(Default)]
@@ -62,7 +62,10 @@ macro_rules! impl_binary_op {
     };
 }
 
-impl<T: Numeric<f64> + Default + Ring + ActivationFunction> Graph<T> where f64: Div<T, Output = T> {
+impl<T: Numeric<f64> + Default + Ring + ActivationFunction> Graph<T>
+where
+    f64: Div<T, Output = T>,
+{
     pub fn var(&mut self, value: T) -> usize {
         let index = self.buffer.len();
         self.buffer.push(Some(value));
@@ -89,6 +92,10 @@ impl<T: Numeric<f64> + Default + Ring + ActivationFunction> Graph<T> where f64: 
 
     pub fn get_vars(&self) -> Vec<usize> {
         self.value_ics.clone()
+    }
+
+    pub fn get_values(&self) -> Vec<Option<T>> {
+        self.buffer.clone()
     }
 
     pub fn subs_var(&mut self, index: usize, value: T) {
@@ -250,7 +257,8 @@ impl<T: Numeric<f64> + Default + Ring + ActivationFunction> Graph<T> where f64: 
     pub fn backward_step(&mut self, index: usize, upstream_gradient: T) {
         match self.nodes[index] {
             Node::Var(value_index) => {
-                self.gradients[value_index] = self.gradients[value_index].clone() + upstream_gradient;
+                self.gradients[value_index] =
+                    self.gradients[value_index].clone() + upstream_gradient;
             }
             Node::Add(left_index, right_index) => {
                 self.backward_step(left_index, upstream_gradient.clone());
@@ -289,7 +297,9 @@ impl<T: Numeric<f64> + Default + Ring + ActivationFunction> Graph<T> where f64: 
                 let right_val = self.forward_step(right_index);
                 self.backward_step(
                     left_index,
-                    right_val.clone() * left_val.pow(right_val.clone() - 1.0) * upstream_gradient.clone(),
+                    right_val.clone()
+                        * left_val.pow(right_val.clone() - 1.0)
+                        * upstream_gradient.clone(),
                 );
                 self.backward_step(
                     right_index,
@@ -802,7 +812,13 @@ impl ActivationFunction for Matrix {
 // ┌──────────────────────────────────────────────────────────┐
 //  Parsing Expr to Graph
 // └──────────────────────────────────────────────────────────┘
-pub fn parse_expr<T: Numeric<f64> + Default + Ring + ActivationFunction>(expr: Expr, graph: &mut Graph<T>) -> usize where f64: Div<T, Output = T> {
+pub fn parse_expr<T: Numeric<f64> + Default + Ring + ActivationFunction>(
+    expr: Expr,
+    graph: &mut Graph<T>,
+) -> usize
+where
+    f64: Div<T, Output = T>,
+{
     match expr {
         Expr::Symbol(index) => index,
         Expr::Add(left, right) => {
@@ -898,5 +914,12 @@ pub fn parse_expr<T: Numeric<f64> + Default + Ring + ActivationFunction>(expr: E
             let index = parse_expr(*expr, graph);
             graph.relu(index)
         }
+    }
+}
+
+impl std::iter::Sum for Expr {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.reduce(|a, b| Expr::Add(Box::new(a), Box::new(b)))
+            .unwrap()
     }
 }
