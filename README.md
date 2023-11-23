@@ -89,6 +89,7 @@ fn f(x_vec: &[Expr]) -> Expr {
 
     (x.powi(2) + y.powi(2)).sqrt()
 }
+```
 
 ### Example 3: Single layer perceptron (low-level)
 
