@@ -1,4 +1,5 @@
 use radient::prelude::*;
+use peroxide::fuga::*;
 
 fn main() {
     // Compile the graph
@@ -9,9 +10,9 @@ fn main() {
     graph.compile(expr);
 
     let value = vec![
-        MR::ml_matrix("1 2; 3 4; 5 6"), // 3x2
-        MR::ml_matrix("2; 1"),         // 2x1
-        MR::ml_matrix("1; -1; 1"), // 3x1
+        ml_matrix("1 2; 3 4; 5 6"), // 3x2
+        ml_matrix("2; 1"),          // 2x1
+        ml_matrix("1; -1; 1"),      // 3x1
     ];
 
     let (result, grads) = gradient_cached(&mut graph, &value);
@@ -20,8 +21,10 @@ fn main() {
     result.print();
 
     println!("grads: ");
-    grads.into_iter()
-        .for_each(|g| { g.print(); println!() });
+    grads.into_iter().for_each(|g| {
+        g.print();
+        println!()
+    });
 }
 
 #[allow(non_snake_case)]
@@ -30,5 +33,5 @@ fn f(x_vec: &[Expr]) -> Expr {
     let x = &x_vec[1];
     let B = &x_vec[2];
 
-    &(A * x) + B
+    (&(A * x) + B).sigmoid()
 }

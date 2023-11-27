@@ -1,6 +1,7 @@
-use crate::core::{Expr, Graph, ActivationFunction};
-use peroxide_num::{Numeric, Ring};
+use crate::core::{Expr, Graph};
+use peroxide_num::Numeric;
 use std::ops::Div;
+use crate::traits::{ActivationFunction, Matrizable};
 
 pub fn gradient<F: Fn(&[Expr]) -> Expr>(f: F, x: &[f64]) -> (f64, Vec<f64>) {
     let mut graph = Graph::default();
@@ -21,7 +22,10 @@ pub fn gradient<F: Fn(&[Expr]) -> Expr>(f: F, x: &[f64]) -> (f64, Vec<f64>) {
 }
 
 /// graph is already compiled
-pub fn gradient_cached<T: std::fmt::Debug + Numeric<f64> + Default + Ring + ActivationFunction>(g: &mut Graph<T>, x: &[T]) -> (T, Vec<T>) 
+pub fn gradient_cached<T: std::fmt::Debug + Numeric<f64> + Default + ActivationFunction + Matrizable>(
+    g: &mut Graph<T>,
+    x: &[T],
+) -> (T, Vec<T>)
 where
     f64: Div<T, Output = T>,
 {

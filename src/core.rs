@@ -1,7 +1,7 @@
 use casey::pascal;
-use peroxide::structure::matrix::{matrix, Matrix};
-use peroxide_num::{ExpLogOps, Numeric, PowOps, Ring, TrigOps};
+use peroxide_num::{ExpLogOps, Numeric, PowOps, TrigOps};
 use std::ops::{Add, Div, Mul, Neg, Sub};
+use crate::traits::{ActivationFunction, Matrizable};
 
 #[derive(Default)]
 pub struct Graph<T> {
@@ -20,6 +20,8 @@ pub enum Node {
     Subf(usize, f64),
     Mul(usize, usize),
     Mulf(f64, usize),
+    Hadamard(usize, usize),
+    Transpose(usize),
     Div(usize, usize),
     Pow(usize, usize),
     Powf(usize, f64),
@@ -62,14 +64,14 @@ macro_rules! impl_binary_op {
     };
 }
 
-impl<T: Numeric<f64> + Default + Ring + ActivationFunction> Graph<T>
+impl<T: std::fmt::Debug + Numeric<f64> + Default + ActivationFunction + Matrizable> Graph<T>
 where
     f64: Div<T, Output = T>,
 {
     pub fn var(&mut self, value: T) -> usize {
         let index = self.buffer.len();
+        self.gradients.push(value.zeros_like());
         self.buffer.push(Some(value));
-        self.gradients.push(T::default());
         self.nodes.push(Node::Var(index));
         self.value_ics.push(index);
         index // The index is used to refer to this variable
@@ -99,6 +101,7 @@ where
     }
 
     pub fn subs_var(&mut self, index: usize, value: T) {
+        self.gradients[index] = value.zeros_like();
         self.buffer[index] = Some(value);
     }
 
@@ -108,6 +111,7 @@ where
 
         for (i, val) in value_ics.iter().zip(vals) {
             self.buffer[*i] = Some(val.clone());
+            self.gradients[*i] = val.zeros_like();
         }
     }
 
@@ -134,6 +138,7 @@ where
     impl_unary_op!(cosh, T);
     impl_unary_op!(tanh, T);
     impl_unary_op!(sigmoid, T);
+    impl_unary_op!(transpose, T);
 
     // Implement the binary operators
     impl_binary_op!(add, T);
@@ -141,6 +146,7 @@ where
     impl_binary_op!(mul, T);
     impl_binary_op!(div, T);
     impl_binary_op!(pow, T);
+    impl_binary_op!(hadamard, T);
 
     pub fn addf(&mut self, num: f64, right: usize) -> usize {
         let index = self.nodes.len();
@@ -208,6 +214,12 @@ where
                         self.forward_step(left_index) * self.forward_step(right_index)
                     }
                     Node::Mulf(num, right_index) => self.forward_step(right_index) * num,
+                    Node::Hadamard(left_index, right_index) => {
+                        self.forward_step(left_index).hadamard(&self.forward_step(right_index))
+                    }
+                    Node::Transpose(operand_index) => {
+                        self.forward_step(operand_index).transpose()
+                    }
                     Node::Div(left_index, right_index) => {
                         self.forward_step(left_index) / self.forward_step(right_index)
                     }
@@ -254,6 +266,7 @@ where
         }
     }
 
+    #[allow(unused_variables)]
     pub fn backward_step(&mut self, index: usize, upstream_gradient: T) {
         match self.nodes[index] {
             Node::Var(value_index) => {
@@ -277,11 +290,26 @@ where
             Node::Mul(left_index, right_index) => {
                 let left_val = self.forward_step(left_index);
                 let right_val = self.forward_step(right_index);
-                self.backward_step(left_index, right_val * upstream_gradient.clone());
-                self.backward_step(right_index, left_val * upstream_gradient);
+                self.backward_step(left_index, upstream_gradient.clone() * right_val.transpose());
+                self.backward_step(right_index, left_val.transpose() * upstream_gradient);
             }
             Node::Mulf(num, right_index) => {
                 self.backward_step(right_index, upstream_gradient * num);
+            }
+            Node::Hadamard(left_index, right_index) => {
+                let left_val = self.forward_step(left_index);
+                let right_val = self.forward_step(right_index);
+                self.backward_step(
+                    left_index,
+                    right_val.hadamard(&upstream_gradient),
+                );
+                self.backward_step(
+                    right_index,
+                    left_val.hadamard(&upstream_gradient),
+                );
+            }
+            Node::Transpose(operand_index) => {
+                self.backward_step(operand_index, upstream_gradient.transpose());
             }
             Node::Div(left_index, right_index) => {
                 let left_val = self.forward_step(left_index);
@@ -289,48 +317,29 @@ where
                 self.backward_step(left_index, upstream_gradient.clone() / right_val.clone());
                 self.backward_step(
                     right_index,
-                    -upstream_gradient * left_val / right_val.powi(2),
+                    -(left_val / right_val.hadamard(&right_val)).hadamard(&upstream_gradient),
                 );
             }
             Node::Pow(left_index, right_index) => {
-                let left_val = self.forward_step(left_index);
-                let right_val = self.forward_step(right_index);
-                self.backward_step(
-                    left_index,
-                    right_val.clone()
-                        * left_val.pow(right_val.clone() - 1.0)
-                        * upstream_gradient.clone(),
-                );
-                self.backward_step(
-                    right_index,
-                    left_val.ln() * left_val.pow(right_val - 1.0) * upstream_gradient,
-                );
+                todo!()
             }
             Node::Powf(operand_index, power) => {
-                let operand_val = self.forward_step(operand_index);
-                self.backward_step(
-                    operand_index,
-                    operand_val.powf(power - 1f64) * upstream_gradient * power,
-                )
+                todo!()
             }
             Node::Powi(operand_index, power) => {
-                let operand_val = self.forward_step(operand_index);
-                self.backward_step(
-                    operand_index,
-                    operand_val.powi(power - 1) * upstream_gradient * power as f64,
-                )
+                todo!()
             }
             Node::Neg(operand_index) => {
                 let operand_val = self.forward_step(operand_index);
-                self.backward_step(operand_index, -upstream_gradient * operand_val);
+                self.backward_step(operand_index, -operand_val.hadamard(&upstream_gradient));
             }
             Node::Recip(operand_index) => {
                 let operand_val = self.forward_step(operand_index);
-                self.backward_step(operand_index, -upstream_gradient / operand_val.powi(2));
+                self.backward_step(operand_index, -upstream_gradient / (operand_val.hadamard(&operand_val)));
             }
             Node::Exp(operand_index) => {
                 let operand_val = self.forward_step(operand_index);
-                self.backward_step(operand_index, operand_val.exp() * upstream_gradient);
+                self.backward_step(operand_index, operand_val.exp().hadamard(&upstream_gradient));
             }
             Node::Ln(operand_index) => {
                 let operand_val = self.forward_step(operand_index);
@@ -338,45 +347,47 @@ where
             }
             Node::Sin(operand_index) => {
                 let operand_val = self.forward_step(operand_index);
-                self.backward_step(operand_index, operand_val.cos() * upstream_gradient);
+                self.backward_step(operand_index, operand_val.cos().hadamard(&upstream_gradient));
             }
             Node::Cos(operand_index) => {
                 let operand_val = self.forward_step(operand_index);
-                self.backward_step(operand_index, -operand_val.sin() * upstream_gradient);
+                self.backward_step(operand_index, -operand_val.sin().hadamard(&upstream_gradient));
             }
             Node::Tan(operand_index) => {
                 let operand_val = self.forward_step(operand_index);
+                let tan = operand_val.tan();
                 self.backward_step(
                     operand_index,
-                    (operand_val.tan().powi(2) + 1f64) * upstream_gradient,
+                    (tan.hadamard(&tan) + 1f64).hadamard(&upstream_gradient),
                 )
             }
             Node::Sinh(operand_index) => {
                 let operand_val = self.forward_step(operand_index);
-                self.backward_step(operand_index, operand_val.cosh() * upstream_gradient);
+                self.backward_step(operand_index, operand_val.cosh().hadamard(&upstream_gradient));
             }
             Node::Cosh(operand_index) => {
                 let operand_val = self.forward_step(operand_index);
-                self.backward_step(operand_index, operand_val.sinh() * upstream_gradient);
+                self.backward_step(operand_index, operand_val.sinh().hadamard(&upstream_gradient));
             }
             Node::Tanh(operand_index) => {
                 let operand_val = self.forward_step(operand_index);
+                let tanh = operand_val.tanh();
                 self.backward_step(
                     operand_index,
-                    (-(operand_val.tanh().powi(2) - 1f64)) * upstream_gradient,
-                )
+                    (-(tanh.hadamard(&tanh) - 1f64)).hadamard(&upstream_gradient),
+                );
             }
             Node::Sigmoid(operand_index) => {
                 let operand_val = self.forward_step(operand_index).sigmoid();
                 let diff_from_one = -operand_val.clone() + 1f64;
                 self.backward_step(
                     operand_index,
-                    operand_val * diff_from_one * upstream_gradient,
-                )
+                    operand_val.hadamard(&diff_from_one).hadamard(&upstream_gradient),
+                );
             }
             Node::ReLU(operand_index) => {
                 let operand_val = self.forward_step(operand_index).heaviside_zero();
-                self.backward_step(operand_index, upstream_gradient * operand_val);
+                self.backward_step(operand_index, operand_val.hadamard(&upstream_gradient));
             }
         }
     }
@@ -407,7 +418,11 @@ where
 
     pub fn backward(&mut self) {
         match self.compiled {
-            Some(idx) => self.backward_step(idx, T::one()),
+            Some(idx) => {
+                let value = self.buffer[idx].as_ref().unwrap().ones_like();
+                println!("Value: {:?}", value);
+                self.backward_step(idx, value);
+            },
             None => panic!("No compiled expression"),
         }
     }
@@ -425,6 +440,7 @@ pub enum Expr {
     Subf(Box<Expr>, f64),
     Mul(Box<Expr>, Box<Expr>),
     Mulf(f64, Box<Expr>),
+    Hadamard(Box<Expr>, Box<Expr>),
     Div(Box<Expr>, Box<Expr>),
     Pow(Box<Expr>, Box<Expr>),
     Powf(Box<Expr>, f64),
@@ -652,6 +668,13 @@ impl Div<f64> for &Expr {
 }
 
 impl TrigOps for Expr {
+    fn sin_cos(&self) -> (Self, Self) {
+        (
+            Expr::Sin(Box::new(self.clone())),
+            Expr::Cos(Box::new(self.clone())),
+        )
+    }
+
     fn sin(&self) -> Self {
         Expr::Sin(Box::new(self.clone()))
     }
@@ -674,13 +697,6 @@ impl TrigOps for Expr {
 
     fn tanh(&self) -> Self {
         Expr::Tanh(Box::new(self.clone()))
-    }
-
-    fn sin_cos(&self) -> (Self, Self) {
-        (
-            Expr::Sin(Box::new(self.clone())),
-            Expr::Cos(Box::new(self.clone())),
-        )
     }
 
     fn asin(&self) -> Self {
@@ -711,16 +727,16 @@ impl TrigOps for Expr {
 impl PowOps for Expr {
     type Float = f64;
 
-    fn pow(&self, rhs: Self) -> Self {
-        Expr::Pow(Box::new(self.clone()), Box::new(rhs))
+    fn powi(&self, rhs: i32) -> Self {
+        Expr::Powi(Box::new(self.clone()), rhs)
     }
 
     fn powf(&self, rhs: f64) -> Self {
         Expr::Powf(Box::new(self.clone()), rhs)
     }
 
-    fn powi(&self, rhs: i32) -> Self {
-        Expr::Powi(Box::new(self.clone()), rhs)
+    fn pow(&self, rhs: Self) -> Self {
+        Expr::Pow(Box::new(self.clone()), Box::new(rhs))
     }
 
     fn sqrt(&self) -> Self {
@@ -754,65 +770,10 @@ impl ExpLogOps for Expr {
 
 impl Numeric<f64> for Expr {}
 
-pub trait ActivationFunction {
-    fn sigmoid(&self) -> Self;
-    fn relu(&self) -> Self;
-    fn heaviside_zero(&self) -> Self;
-}
-
-impl ActivationFunction for f64 {
-    fn sigmoid(&self) -> Self {
-        1.0 / (1.0 + (-self).exp())
-    }
-
-    fn relu(&self) -> Self {
-        self.max(0.0)
-    }
-
-    fn heaviside_zero(&self) -> Self {
-        if self.is_sign_positive() {
-            1.0
-        } else {
-            0.0
-        }
-    }
-}
-
-impl ActivationFunction for Expr {
-    fn sigmoid(&self) -> Self {
-        Expr::Sigmoid(Box::new(self.clone()))
-    }
-
-    fn relu(&self) -> Self {
-        Expr::ReLU(Box::new(self.clone()))
-    }
-
-    fn heaviside_zero(&self) -> Self {
-        unimplemented!()
-    }
-}
-
-impl ActivationFunction for Matrix {
-    fn sigmoid(&self) -> Self {
-        let data = self.data.iter().map(|x| x.sigmoid()).collect();
-        matrix(data, self.row, self.col, self.shape)
-    }
-
-    fn relu(&self) -> Self {
-        let data = self.data.iter().map(|x| x.relu()).collect();
-        matrix(data, self.row, self.col, self.shape)
-    }
-
-    fn heaviside_zero(&self) -> Self {
-        let data = self.data.iter().map(|x| x.heaviside_zero()).collect();
-        matrix(data, self.row, self.col, self.shape)
-    }
-}
-
 // ┌──────────────────────────────────────────────────────────┐
 //  Parsing Expr to Graph
 // └──────────────────────────────────────────────────────────┘
-pub fn parse_expr<T: Numeric<f64> + Default + Ring + ActivationFunction>(
+pub fn parse_expr<T: std::fmt::Debug + Numeric<f64> + Default + ActivationFunction + Matrizable>(
     expr: Expr,
     graph: &mut Graph<T>,
 ) -> usize
@@ -847,6 +808,11 @@ where
         Expr::Mulf(num, right) => {
             let right_index = parse_expr(*right, graph);
             graph.mulf(num, right_index)
+        }
+        Expr::Hadamard(left, right) => {
+            let left_index = parse_expr(*left, graph);
+            let right_index = parse_expr(*right, graph);
+            graph.hadamard(left_index, right_index)
         }
         Expr::Div(left, right) => {
             let left_index = parse_expr(*left, graph);
