@@ -1,4 +1,6 @@
-use crate::core::{Expr, Graph};
+use crate::core::{Expr, Graph, ActivationFunction};
+use peroxide_num::{Numeric, Ring};
+use std::ops::Div;
 
 pub fn gradient<F: Fn(&[Expr]) -> Expr>(f: F, x: &[f64]) -> (f64, Vec<f64>) {
     let mut graph = Graph::default();
@@ -19,10 +21,14 @@ pub fn gradient<F: Fn(&[Expr]) -> Expr>(f: F, x: &[f64]) -> (f64, Vec<f64>) {
 }
 
 /// graph is already compiled
-pub fn gradient_cached(g: &mut Graph<f64>, x: &[f64]) -> (f64, Vec<f64>) {
+pub fn gradient_cached<T: std::fmt::Debug + Numeric<f64> + Default + Ring + ActivationFunction>(g: &mut Graph<T>, x: &[T]) -> (T, Vec<T>) 
+where
+    f64: Div<T, Output = T>,
+{
     g.reset();
     g.subs_vars(x);
     let result = g.forward();
+    println!("result: {:?}", result);
     g.backward();
     let grads = g.get_gradients();
 
