@@ -889,3 +889,10 @@ impl std::iter::Sum for Expr {
             .unwrap()
     }
 }
+
+impl std::iter::Product for Expr {
+    fn product<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.reduce(|a, b| Expr::Mul(Box::new(a), Box::new(b)))
+            .unwrap()
+    }
+}
