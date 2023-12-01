@@ -88,6 +88,16 @@ where
         }
     }
 
+    /// Declare symbol (not initialize variable)
+    pub fn symbol(&mut self) -> Expr {
+        let index = self.buffer.len();
+        self.buffer.push(None);
+        self.gradients.push(T::default());
+        self.nodes.push(Node::Var(index));
+        self.value_ics.push(index);
+        Expr::Symbol(index)
+    }
+
     pub fn get_var(&self, var_order: usize) -> usize {
         self.value_ics[var_order]
     }
@@ -420,7 +430,7 @@ where
         match self.compiled {
             Some(idx) => {
                 let value = self.buffer[idx].as_ref().unwrap().ones_like();
-                println!("Value: {:?}", value);
+                //println!("Value: {:?}", value);
                 self.backward_step(idx, value);
             },
             None => panic!("No compiled expression"),
