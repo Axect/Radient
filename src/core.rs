@@ -10,6 +10,7 @@ pub struct Graph<T> {
     nodes: Vec<Node>, // Added to store the nodes
     value_ics: Vec<usize>,
     compiled: Option<usize>,
+    topological_order: Option<Vec<usize>>,
 }
 
 pub enum Node {
@@ -86,6 +87,7 @@ where
             self.nodes.push(Node::Var(start_index + i));
             self.value_ics.push(start_index + i);
         }
+        self.topological_order = None;
     }
 
     /// Declare symbol (not initialize variable)
@@ -95,6 +97,7 @@ where
         self.gradients.push(T::default());
         self.nodes.push(Node::Var(index));
         self.value_ics.push(index);
+        self.topological_order = None;
         Expr::Symbol(index)
     }
 
@@ -134,6 +137,78 @@ where
             .iter()
             .map(|x| Expr::Symbol(*x))
             .collect::<Vec<_>>()
+    }
+
+    pub fn get_topological_order(&mut self) -> Vec<usize> {
+        if self.topological_order.is_none() {
+            self.topological_order = Some(self.topological_sort());
+        }
+        self.topological_order.as_ref().unwrap().clone()
+    }
+
+    /// Topological sort
+    fn topological_sort(&self) -> Vec<usize> {
+        if self.topological_order.is_some() {
+            return self.topological_order.as_ref().unwrap().clone();
+        }
+        let mut visited = vec![false; self.nodes.len()];
+        let mut order = Vec::with_capacity(self.nodes.len());
+
+        for i in 0..self.nodes.len() {
+            if !visited[i] {
+                self.topological_sort_dfs(i, &mut visited, &mut order);
+            }
+        }
+
+        order
+    }
+
+    /// Helper function for topological sort via DFS
+    fn topological_sort_dfs(
+        &self,
+        index: usize,
+        visited: &mut Vec<bool>,
+        order: &mut Vec<usize>,
+    ) {
+        visited[index] = true;
+
+        for &child_index in self.get_children(index).iter() {
+            if !visited[child_index] {
+                self.topological_sort_dfs(child_index, visited, order);
+            }
+        }
+
+        order.push(index);
+    }
+
+    /// Get children of a node
+    fn get_children(&self, index: usize) -> Vec<usize> {
+        match &self.nodes[index] {
+            Node::Var(_) => vec![],
+            Node::Add(l, r)
+            | Node::Sub(l, r)
+            | Node::Mul(l, r)
+            | Node::Div(l, r)
+            | Node::Pow(l, r)
+            | Node::Hadamard(l, r) => vec![*l, *r],
+            Node::Addf(_, r) | Node::Mulf(_, r) => vec![*r],
+            Node::Subf(l, _) => vec![*l],
+            Node::Neg(i)
+            | Node::Recip(i)
+            | Node::Exp(i)
+            | Node::Ln(i)
+            | Node::Sin(i)
+            | Node::Cos(i)
+            | Node::Tan(i)
+            | Node::Sinh(i)
+            | Node::Cosh(i)
+            | Node::Tanh(i)
+            | Node::Sigmoid(i)
+            | Node::ReLU(i)
+            | Node::Transpose(i)
+            | Node::Powf(i, _)
+            | Node::Powi(i, _) => vec![*i],
+        }
     }
 
     // Implement the unary operators
@@ -206,57 +281,296 @@ where
         index
     }
 
-    pub fn forward_step(&mut self, index: usize) -> T {
-        match &self.buffer[index] {
-            Some(value) => value.clone(),
-            None => {
-                let result = match self.nodes[index] {
-                    Node::Var(_) => unreachable!(),
-                    Node::Add(left_index, right_index) => {
-                        self.forward_step(left_index) + self.forward_step(right_index)
-                    }
-                    Node::Sub(left_index, right_index) => {
-                        self.forward_step(left_index) - self.forward_step(right_index)
-                    }
-                    Node::Addf(num, right_index) => self.forward_step(right_index) + num,
-                    Node::Subf(left_index, num) => self.forward_step(left_index) - num,
-                    Node::Mul(left_index, right_index) => {
-                        self.forward_step(left_index) * self.forward_step(right_index)
-                    }
-                    Node::Mulf(num, right_index) => self.forward_step(right_index) * num,
-                    Node::Hadamard(left_index, right_index) => {
-                        self.forward_step(left_index).hadamard(&self.forward_step(right_index))
-                    }
-                    Node::Transpose(operand_index) => {
-                        self.forward_step(operand_index).transpose()
-                    }
-                    Node::Div(left_index, right_index) => {
-                        self.forward_step(left_index) / self.forward_step(right_index)
-                    }
-                    Node::Pow(left_index, right_index) => self
-                        .forward_step(left_index)
-                        .pow(self.forward_step(right_index)),
-                    Node::Powf(operand_index, power) => {
-                        self.forward_step(operand_index).powf(power)
-                    }
-                    Node::Powi(operand_index, power) => {
-                        self.forward_step(operand_index).powi(power)
-                    }
-                    Node::Neg(operand_index) => -self.forward_step(operand_index),
-                    Node::Recip(operand_index) => 1.0 / self.forward_step(operand_index),
-                    Node::Exp(operand_index) => self.forward_step(operand_index).exp(),
-                    Node::Ln(operand_index) => self.forward_step(operand_index).ln(),
-                    Node::Sin(operand_index) => self.forward_step(operand_index).sin(),
-                    Node::Cos(operand_index) => self.forward_step(operand_index).cos(),
-                    Node::Tan(operand_index) => self.forward_step(operand_index).tan(),
-                    Node::Sinh(operand_index) => self.forward_step(operand_index).sinh(),
-                    Node::Cosh(operand_index) => self.forward_step(operand_index).cosh(),
-                    Node::Tanh(operand_index) => self.forward_step(operand_index).tanh(),
-                    Node::Sigmoid(operand_index) => self.forward_step(operand_index).sigmoid(),
-                    Node::ReLU(operand_index) => self.forward_step(operand_index).relu(),
-                };
-                self.buffer[index] = Some(result.clone());
-                result
+    //pub fn forward_step(&mut self, index: usize) -> T {
+    //    match &self.buffer[index] {
+    //        Some(value) => value.clone(),
+    //        None => {
+    //            let result = match self.nodes[index] {
+    //                Node::Var(_) => unreachable!(),
+    //                Node::Add(left_index, right_index) => {
+    //                    self.forward_step(left_index) + self.forward_step(right_index)
+    //                }
+    //                Node::Sub(left_index, right_index) => {
+    //                    self.forward_step(left_index) - self.forward_step(right_index)
+    //                }
+    //                Node::Addf(num, right_index) => self.forward_step(right_index) + num,
+    //                Node::Subf(left_index, num) => self.forward_step(left_index) - num,
+    //                Node::Mul(left_index, right_index) => {
+    //                    self.forward_step(left_index) * self.forward_step(right_index)
+    //                }
+    //                Node::Mulf(num, right_index) => self.forward_step(right_index) * num,
+    //                Node::Hadamard(left_index, right_index) => {
+    //                    self.forward_step(left_index).hadamard(&self.forward_step(right_index))
+    //                }
+    //                Node::Transpose(operand_index) => {
+    //                    self.forward_step(operand_index).transpose()
+    //                }
+    //                Node::Div(left_index, right_index) => {
+    //                    self.forward_step(left_index) / self.forward_step(right_index)
+    //                }
+    //                Node::Pow(left_index, right_index) => self
+    //                    .forward_step(left_index)
+    //                    .pow(self.forward_step(right_index)),
+    //                Node::Powf(operand_index, power) => {
+    //                    self.forward_step(operand_index).powf(power)
+    //                }
+    //                Node::Powi(operand_index, power) => {
+    //                    self.forward_step(operand_index).powi(power)
+    //                }
+    //                Node::Neg(operand_index) => -self.forward_step(operand_index),
+    //                Node::Recip(operand_index) => 1.0 / self.forward_step(operand_index),
+    //                Node::Exp(operand_index) => self.forward_step(operand_index).exp(),
+    //                Node::Ln(operand_index) => self.forward_step(operand_index).ln(),
+    //                Node::Sin(operand_index) => self.forward_step(operand_index).sin(),
+    //                Node::Cos(operand_index) => self.forward_step(operand_index).cos(),
+    //                Node::Tan(operand_index) => self.forward_step(operand_index).tan(),
+    //                Node::Sinh(operand_index) => self.forward_step(operand_index).sinh(),
+    //                Node::Cosh(operand_index) => self.forward_step(operand_index).cosh(),
+    //                Node::Tanh(operand_index) => self.forward_step(operand_index).tanh(),
+    //                Node::Sigmoid(operand_index) => self.forward_step(operand_index).sigmoid(),
+    //                Node::ReLU(operand_index) => self.forward_step(operand_index).relu(),
+    //            };
+    //            self.buffer[index] = Some(result.clone());
+    //            result
+    //        }
+    //    }
+    //}
+
+    /// Iterative forward
+    pub fn forward(&mut self) -> T {
+        let order = self.get_topological_order();
+        for index in order {
+            if self.buffer[index].is_some() {
+                continue;
+            }
+            let result = match &self.nodes[index] {
+                Node::Var(_) => {
+                    self.buffer[index].clone().unwrap()
+                }
+                Node::Add(left_index, right_index) => {
+                    self.buffer[*left_index].clone().unwrap()
+                        + self.buffer[*right_index].clone().unwrap()
+                }
+                Node::Addf(num, right_index) => {
+                    self.buffer[*right_index].clone().unwrap() + *num
+                }
+                Node::Sub(left_index, right_index) => {
+                    self.buffer[*left_index].clone().unwrap()
+                        - self.buffer[*right_index].clone().unwrap()
+                }
+                Node::Subf(left_index, num) => {
+                    self.buffer[*left_index].clone().unwrap() - *num
+                }
+                Node::Mul(left_index, right_index) => {
+                    self.buffer[*left_index].clone().unwrap()
+                        * self.buffer[*right_index].clone().unwrap()
+                }
+                Node::Mulf(num, right_index) => {
+                    self.buffer[*right_index].clone().unwrap() * *num
+                }
+                Node::Hadamard(left_index, right_index) => {
+                    self.buffer[*left_index].clone().unwrap()
+                        .hadamard(&self.buffer[*right_index].clone().unwrap())
+                }
+                Node::Transpose(operand_index) => {
+                    self.buffer[*operand_index].clone().unwrap().transpose()
+                }
+                Node::Div(left_index, right_index) => {
+                    self.buffer[*left_index].clone().unwrap()
+                        / self.buffer[*right_index].clone().unwrap()
+                }
+                Node::Pow(left_index, right_index) => {
+                    self.buffer[*left_index].clone().unwrap()
+                        .pow(self.buffer[*right_index].clone().unwrap())
+                }
+                Node::Powf(operand_index, power) => {
+                    self.buffer[*operand_index].clone().unwrap().powf(*power)
+                }
+                Node::Powi(operand_index, power) => {
+                    self.buffer[*operand_index].clone().unwrap().powi(*power)
+                }
+                Node::Neg(operand_index) => {
+                    -self.buffer[*operand_index].clone().unwrap()
+                }
+                Node::Recip(operand_index) => {
+                    1.0 / self.buffer[*operand_index].clone().unwrap()
+                }
+                Node::Exp(operand_index) => {
+                    self.buffer[*operand_index].clone().unwrap().exp()
+                }
+                Node::Ln(operand_index) => {
+                    self.buffer[*operand_index].clone().unwrap().ln()
+                }
+                Node::Sin(operand_index) => {
+                    self.buffer[*operand_index].clone().unwrap().sin()
+                }
+                Node::Cos(operand_index) => {
+                    self.buffer[*operand_index].clone().unwrap().cos()
+                }
+                Node::Tan(operand_index) => {
+                    self.buffer[*operand_index].clone().unwrap().tan()
+                }
+                Node::Sinh(operand_index) => {
+                    self.buffer[*operand_index].clone().unwrap().sinh()
+                }
+                Node::Cosh(operand_index) => {
+                    self.buffer[*operand_index].clone().unwrap().cosh()
+                }
+                Node::Tanh(operand_index) => {
+                    self.buffer[*operand_index].clone().unwrap().tanh()
+                }
+                Node::Sigmoid(operand_index) => {
+                    self.buffer[*operand_index].clone().unwrap().sigmoid()
+                }
+                Node::ReLU(operand_index) => {
+                    self.buffer[*operand_index].clone().unwrap().relu()
+                }
+            };
+            self.buffer[index] = Some(result);
+        }
+        // Return compiled value
+        self.buffer[self.compiled.unwrap()].clone().unwrap()
+    }
+
+    /// Iterative backward
+    pub fn backward(&mut self) {
+        let order = self.get_topological_order();
+        let reverse_order = order.into_iter().rev();
+
+        // Initialize gradients
+        let output_index = self.compiled.unwrap();
+        self.gradients[output_index] = self.buffer[output_index]
+            .as_ref()
+            .unwrap()
+            .ones_like();
+
+        for index in reverse_order {
+            let gradient = self.gradients[index].clone();
+            match &self.nodes[index] {
+                Node::Var(_) => {
+                    continue;
+                }
+                Node::Add(left_index, right_index) => {
+                    self.gradients[*left_index] = self.gradients[*left_index].clone() + gradient.clone();
+                    self.gradients[*right_index] = self.gradients[*right_index].clone() + gradient.clone(); 
+                }
+                Node::Addf(_, right_index) => {
+                    self.gradients[*right_index] = self.gradients[*right_index].clone() + gradient.clone();
+                }
+                Node::Sub(left_index, right_index) => {
+                    self.gradients[*left_index] = self.gradients[*left_index].clone() + gradient.clone();
+                    self.gradients[*right_index] = self.gradients[*right_index].clone() - gradient.clone();
+                }
+                Node::Subf(left_index, _) => {
+                    self.gradients[*left_index] = self.gradients[*left_index].clone() + gradient.clone();
+                }
+                Node::Mul(left_index, right_index) => {
+                    let left_val = self.buffer[*left_index].as_ref().unwrap();
+                    let right_val = self.buffer[*right_index].as_ref().unwrap();
+                    self.gradients[*left_index] = self.gradients[*left_index].clone()
+                        + gradient.clone() * right_val.transpose();
+                    self.gradients[*right_index] = self.gradients[*right_index].clone()
+                        + left_val.transpose() * gradient.clone();
+                }
+                Node::Mulf(num, right_index) => {
+                    self.gradients[*right_index] = self.gradients[*right_index].clone() + gradient.clone() * *num;
+                }
+                Node::Hadamard(left_index, right_index) => {
+                    let left_val = self.buffer[*left_index].as_ref().unwrap();
+                    let right_val = self.buffer[*right_index].as_ref().unwrap();
+                    self.gradients[*left_index] = self.gradients[*left_index].clone()
+                        + right_val.hadamard(&gradient);
+                    self.gradients[*right_index] = self.gradients[*right_index].clone()
+                        + left_val.hadamard(&gradient);
+                }
+                Node::Transpose(operand_index) => {
+                    self.gradients[*operand_index] = self.gradients[*operand_index].clone()
+                        + gradient.transpose();
+                }
+                Node::Div(left_index, right_index) => {
+                    let left_val = self.buffer[*left_index].as_ref().unwrap();
+                    let right_val = self.buffer[*right_index].as_ref().unwrap();
+                    self.gradients[*left_index] = self.gradients[*left_index].clone()
+                        + gradient.clone() / right_val.clone();
+                    self.gradients[*right_index] = self.gradients[*right_index].clone()
+                        - (left_val.clone() / right_val.hadamard(right_val)).hadamard(&gradient);
+                }
+                Node::Pow(_left_index, _right_index) => {
+                    todo!()
+                }
+                Node::Powf(left_index, num) => {
+                    let x = self.buffer[*left_index].as_ref().unwrap();
+                    self.gradients[*left_index] = self.gradients[*left_index].clone() + gradient.clone() * *num * x.powf(*num - 1.0);
+                }
+                Node::Powi(left_index, num) => {
+                    let x = self.buffer[*left_index].as_ref().unwrap();
+                    self.gradients[*left_index] = self.gradients[*left_index].clone() + gradient.clone() * (*num as f64) * x.powi(*num - 1);
+                }
+                Node::Neg(operand_index) => {
+                    let operand_val = self.buffer[*operand_index].as_ref().unwrap();
+                    self.gradients[*operand_index] = self.gradients[*operand_index].clone()
+                        - operand_val.hadamard(&gradient);
+                }
+                Node::Recip(operand_index) => {
+                    let operand_val = self.buffer[*operand_index].as_ref().unwrap();
+                    self.gradients[*operand_index] = self.gradients[*operand_index].clone()
+                        - gradient.clone() / operand_val.hadamard(operand_val);
+                }
+                Node::Exp(operand_index) => {
+                    let operand_val = self.buffer[*operand_index].as_ref().unwrap();
+                    self.gradients[*operand_index] = self.gradients[*operand_index].clone()
+                        + operand_val.exp().hadamard(&gradient);
+                }
+                Node::Ln(operand_index) => {
+                    let operand_val = self.buffer[*operand_index].as_ref().unwrap();
+                    self.gradients[*operand_index] = self.gradients[*operand_index].clone()
+                        + gradient.clone() / operand_val.clone();
+                }
+                Node::Sin(operand_index) => {
+                    let operand_val = self.buffer[*operand_index].as_ref().unwrap();
+                    self.gradients[*operand_index] = self.gradients[*operand_index].clone()
+                        + operand_val.cos().hadamard(&gradient);
+                }
+                Node::Cos(operand_index) => {
+                    let operand_val = self.buffer[*operand_index].as_ref().unwrap();
+                    self.gradients[*operand_index] = self.gradients[*operand_index].clone()
+                        - operand_val.sin().hadamard(&gradient);
+                }
+                Node::Tan(operand_index) => {
+                    let operand_val = self.buffer[*operand_index].as_ref().unwrap();
+                    let tan = operand_val.tan();
+                    self.gradients[*operand_index] = self.gradients[*operand_index].clone()
+                        + (tan.hadamard(&tan) + 1f64).hadamard(&gradient);
+                }
+                Node::Sinh(operand_index) => {
+                    let operand_val = self.buffer[*operand_index].as_ref().unwrap();
+                    self.gradients[*operand_index] = self.gradients[*operand_index].clone()
+                        + operand_val.cosh().hadamard(&gradient);
+                }
+                Node::Cosh(operand_index) => {
+                    let operand_val = self.buffer[*operand_index].as_ref().unwrap();
+                    self.gradients[*operand_index] = self.gradients[*operand_index].clone()
+                        + operand_val.sinh().hadamard(&gradient);
+                }
+                Node::Tanh(operand_index) => {
+                    let operand_val = self.buffer[*operand_index].as_ref().unwrap();
+                    let tanh = operand_val.tanh();
+                    self.gradients[*operand_index] = self.gradients[*operand_index].clone()
+                        + (-(tanh.hadamard(&tanh) - 1f64)).hadamard(&gradient);
+                }
+                Node::Sigmoid(operand_index) => {
+                    let operand_val = self.buffer[*operand_index].as_ref().unwrap();
+                    let sigmoid = operand_val.sigmoid();
+                    let diff_sigmoid = -sigmoid.clone() + 1f64;
+                    self.gradients[*operand_index] = self.gradients[*operand_index].clone()
+                        + sigmoid.hadamard(&diff_sigmoid).hadamard(&gradient);
+                }
+                Node::ReLU(operand_index) => {
+                    let operand_val = self.buffer[*operand_index].as_ref().unwrap();
+                    let relu = operand_val.heaviside_zero();
+                    self.gradients[*operand_index] = self.gradients[*operand_index].clone()
+                        + relu.hadamard(&gradient);
+                }
             }
         }
     }
@@ -276,131 +590,131 @@ where
         }
     }
 
-    #[allow(unused_variables)]
-    pub fn backward_step(&mut self, index: usize, upstream_gradient: T) {
-        match self.nodes[index] {
-            Node::Var(value_index) => {
-                self.gradients[value_index] =
-                    self.gradients[value_index].clone() + upstream_gradient;
-            }
-            Node::Add(left_index, right_index) => {
-                self.backward_step(left_index, upstream_gradient.clone());
-                self.backward_step(right_index, upstream_gradient);
-            }
-            Node::Addf(_, right_index) => {
-                self.backward_step(right_index, upstream_gradient);
-            }
-            Node::Sub(left_index, right_index) => {
-                self.backward_step(left_index, upstream_gradient.clone());
-                self.backward_step(right_index, -upstream_gradient);
-            }
-            Node::Subf(left_index, _) => {
-                self.backward_step(left_index, upstream_gradient);
-            }
-            Node::Mul(left_index, right_index) => {
-                let left_val = self.forward_step(left_index);
-                let right_val = self.forward_step(right_index);
-                self.backward_step(left_index, upstream_gradient.clone() * right_val.transpose());
-                self.backward_step(right_index, left_val.transpose() * upstream_gradient);
-            }
-            Node::Mulf(num, right_index) => {
-                self.backward_step(right_index, upstream_gradient * num);
-            }
-            Node::Hadamard(left_index, right_index) => {
-                let left_val = self.forward_step(left_index);
-                let right_val = self.forward_step(right_index);
-                self.backward_step(
-                    left_index,
-                    right_val.hadamard(&upstream_gradient),
-                );
-                self.backward_step(
-                    right_index,
-                    left_val.hadamard(&upstream_gradient),
-                );
-            }
-            Node::Transpose(operand_index) => {
-                self.backward_step(operand_index, upstream_gradient.transpose());
-            }
-            Node::Div(left_index, right_index) => {
-                let left_val = self.forward_step(left_index);
-                let right_val = self.forward_step(right_index);
-                self.backward_step(left_index, upstream_gradient.clone() / right_val.clone());
-                self.backward_step(
-                    right_index,
-                    -(left_val / right_val.hadamard(&right_val)).hadamard(&upstream_gradient),
-                );
-            }
-            Node::Pow(left_index, right_index) => {
-                todo!()
-            }
-            Node::Powf(operand_index, power) => {
-                todo!()
-            }
-            Node::Powi(operand_index, power) => {
-                todo!()
-            }
-            Node::Neg(operand_index) => {
-                let operand_val = self.forward_step(operand_index);
-                self.backward_step(operand_index, -operand_val.hadamard(&upstream_gradient));
-            }
-            Node::Recip(operand_index) => {
-                let operand_val = self.forward_step(operand_index);
-                self.backward_step(operand_index, -upstream_gradient / (operand_val.hadamard(&operand_val)));
-            }
-            Node::Exp(operand_index) => {
-                let operand_val = self.forward_step(operand_index);
-                self.backward_step(operand_index, operand_val.exp().hadamard(&upstream_gradient));
-            }
-            Node::Ln(operand_index) => {
-                let operand_val = self.forward_step(operand_index);
-                self.backward_step(operand_index, upstream_gradient / operand_val);
-            }
-            Node::Sin(operand_index) => {
-                let operand_val = self.forward_step(operand_index);
-                self.backward_step(operand_index, operand_val.cos().hadamard(&upstream_gradient));
-            }
-            Node::Cos(operand_index) => {
-                let operand_val = self.forward_step(operand_index);
-                self.backward_step(operand_index, -operand_val.sin().hadamard(&upstream_gradient));
-            }
-            Node::Tan(operand_index) => {
-                let operand_val = self.forward_step(operand_index);
-                let tan = operand_val.tan();
-                self.backward_step(
-                    operand_index,
-                    (tan.hadamard(&tan) + 1f64).hadamard(&upstream_gradient),
-                )
-            }
-            Node::Sinh(operand_index) => {
-                let operand_val = self.forward_step(operand_index);
-                self.backward_step(operand_index, operand_val.cosh().hadamard(&upstream_gradient));
-            }
-            Node::Cosh(operand_index) => {
-                let operand_val = self.forward_step(operand_index);
-                self.backward_step(operand_index, operand_val.sinh().hadamard(&upstream_gradient));
-            }
-            Node::Tanh(operand_index) => {
-                let operand_val = self.forward_step(operand_index);
-                let tanh = operand_val.tanh();
-                self.backward_step(
-                    operand_index,
-                    (-(tanh.hadamard(&tanh) - 1f64)).hadamard(&upstream_gradient),
-                );
-            }
-            Node::Sigmoid(operand_index) => {
-                let operand_val = self.forward_step(operand_index).sigmoid();
-                let diff_from_one = -operand_val.clone() + 1f64;
-                self.backward_step(
-                    operand_index,
-                    operand_val.hadamard(&diff_from_one).hadamard(&upstream_gradient),
-                );
-            }
-            Node::ReLU(operand_index) => {
-                let operand_val = self.forward_step(operand_index).heaviside_zero();
-                self.backward_step(operand_index, operand_val.hadamard(&upstream_gradient));
-            }
-        }
-    }
+    //#[allow(unused_variables)]
+    //pub fn backward_step(&mut self, index: usize, upstream_gradient: T) {
+    //    match self.nodes[index] {
+    //        Node::Var(value_index) => {
+    //            self.gradients[value_index] =
+    //                self.gradients[value_index].clone() + upstream_gradient;
+    //        }
+    //        Node::Add(left_index, right_index) => {
+    //            self.backward_step(left_index, upstream_gradient.clone());
+    //            self.backward_step(right_index, upstream_gradient);
+    //        }
+    //        Node::Addf(_, right_index) => {
+    //            self.backward_step(right_index, upstream_gradient);
+    //        }
+    //        Node::Sub(left_index, right_index) => {
+    //            self.backward_step(left_index, upstream_gradient.clone());
+    //            self.backward_step(right_index, -upstream_gradient);
+    //        }
+    //        Node::Subf(left_index, _) => {
+    //            self.backward_step(left_index, upstream_gradient);
+    //        }
+    //        Node::Mul(left_index, right_index) => {
+    //            let left_val = self.forward_step(left_index);
+    //            let right_val = self.forward_step(right_index);
+    //            self.backward_step(left_index, upstream_gradient.clone() * right_val.transpose());
+    //            self.backward_step(right_index, left_val.transpose() * upstream_gradient);
+    //        }
+    //        Node::Mulf(num, right_index) => {
+    //            self.backward_step(right_index, upstream_gradient * num);
+    //        }
+    //        Node::Hadamard(left_index, right_index) => {
+    //            let left_val = self.forward_step(left_index);
+    //            let right_val = self.forward_step(right_index);
+    //            self.backward_step(
+    //                left_index,
+    //                right_val.hadamard(&upstream_gradient),
+    //            );
+    //            self.backward_step(
+    //                right_index,
+    //                left_val.hadamard(&upstream_gradient),
+    //            );
+    //        }
+    //        Node::Transpose(operand_index) => {
+    //            self.backward_step(operand_index, upstream_gradient.transpose());
+    //        }
+    //        Node::Div(left_index, right_index) => {
+    //            let left_val = self.forward_step(left_index);
+    //            let right_val = self.forward_step(right_index);
+    //            self.backward_step(left_index, upstream_gradient.clone() / right_val.clone());
+    //            self.backward_step(
+    //                right_index,
+    //                -(left_val / right_val.hadamard(&right_val)).hadamard(&upstream_gradient),
+    //            );
+    //        }
+    //        Node::Pow(left_index, right_index) => {
+    //            todo!()
+    //        }
+    //        Node::Powf(operand_index, power) => {
+    //            todo!()
+    //        }
+    //        Node::Powi(operand_index, power) => {
+    //            todo!()
+    //        }
+    //        Node::Neg(operand_index) => {
+    //            let operand_val = self.forward_step(operand_index);
+    //            self.backward_step(operand_index, -operand_val.hadamard(&upstream_gradient));
+    //        }
+    //        Node::Recip(operand_index) => {
+    //            let operand_val = self.forward_step(operand_index);
+    //            self.backward_step(operand_index, -upstream_gradient / (operand_val.hadamard(&operand_val)));
+    //        }
+    //        Node::Exp(operand_index) => {
+    //            let operand_val = self.forward_step(operand_index);
+    //            self.backward_step(operand_index, operand_val.exp().hadamard(&upstream_gradient));
+    //        }
+    //        Node::Ln(operand_index) => {
+    //            let operand_val = self.forward_step(operand_index);
+    //            self.backward_step(operand_index, upstream_gradient / operand_val);
+    //        }
+    //        Node::Sin(operand_index) => {
+    //            let operand_val = self.forward_step(operand_index);
+    //            self.backward_step(operand_index, operand_val.cos().hadamard(&upstream_gradient));
+    //        }
+    //        Node::Cos(operand_index) => {
+    //            let operand_val = self.forward_step(operand_index);
+    //            self.backward_step(operand_index, -operand_val.sin().hadamard(&upstream_gradient));
+    //        }
+    //        Node::Tan(operand_index) => {
+    //            let operand_val = self.forward_step(operand_index);
+    //            let tan = operand_val.tan();
+    //            self.backward_step(
+    //                operand_index,
+    //                (tan.hadamard(&tan) + 1f64).hadamard(&upstream_gradient),
+    //            )
+    //        }
+    //        Node::Sinh(operand_index) => {
+    //            let operand_val = self.forward_step(operand_index);
+    //            self.backward_step(operand_index, operand_val.cosh().hadamard(&upstream_gradient));
+    //        }
+    //        Node::Cosh(operand_index) => {
+    //            let operand_val = self.forward_step(operand_index);
+    //            self.backward_step(operand_index, operand_val.sinh().hadamard(&upstream_gradient));
+    //        }
+    //        Node::Tanh(operand_index) => {
+    //            let operand_val = self.forward_step(operand_index);
+    //            let tanh = operand_val.tanh();
+    //            self.backward_step(
+    //                operand_index,
+    //                (-(tanh.hadamard(&tanh) - 1f64)).hadamard(&upstream_gradient),
+    //            );
+    //        }
+    //        Node::Sigmoid(operand_index) => {
+    //            let operand_val = self.forward_step(operand_index).sigmoid();
+    //            let diff_from_one = -operand_val.clone() + 1f64;
+    //            self.backward_step(
+    //                operand_index,
+    //                operand_val.hadamard(&diff_from_one).hadamard(&upstream_gradient),
+    //            );
+    //        }
+    //        Node::ReLU(operand_index) => {
+    //            let operand_val = self.forward_step(operand_index).heaviside_zero();
+    //            self.backward_step(operand_index, operand_val.hadamard(&upstream_gradient));
+    //        }
+    //    }
+    //}
 
     pub fn get_gradient(&self, index: usize) -> T {
         self.gradients[index].clone()
@@ -419,23 +733,23 @@ where
         self.compiled
     }
 
-    pub fn forward(&mut self) -> T {
-        match self.compiled {
-            Some(idx) => self.forward_step(idx),
-            None => panic!("No compiled expression"),
-        }
-    }
+    //pub fn forward(&mut self) -> T {
+    //    match self.compiled {
+    //        Some(idx) => self.forward_step(idx),
+    //        None => panic!("No compiled expression"),
+    //    }
+    //}
 
-    pub fn backward(&mut self) {
-        match self.compiled {
-            Some(idx) => {
-                let value = self.buffer[idx].as_ref().unwrap().ones_like();
-                //println!("Value: {:?}", value);
-                self.backward_step(idx, value);
-            },
-            None => panic!("No compiled expression"),
-        }
-    }
+    //pub fn backward(&mut self) {
+    //    match self.compiled {
+    //        Some(idx) => {
+    //            let value = self.buffer[idx].as_ref().unwrap().ones_like();
+    //            //println!("Value: {:?}", value);
+    //            self.backward_step(idx, value);
+    //        },
+    //        None => panic!("No compiled expression"),
+    //    }
+    //}
 }
 
 // ┌──────────────────────────────────────────────────────────┐
