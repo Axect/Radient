@@ -3,6 +3,12 @@
 version = 3
 
 [[package]]
+name = "anyhow"
+version = "1.0.89"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86fdf8605db99b54d3cd748a44c6d04df638eb5dafb219b135d0149bd0db01f6"
+
+[[package]]
 name = "autocfg"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -58,6 +64,12 @@ name = "hermit-abi"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d77f7ec81a6d05a3abb01ab6eb7590f6083d08449fe5a1c8b1e620283546ccb7"
+
+[[package]]
+name = "lambert_w"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "416b1315eb2fad6ac298e11cd12b6bf3d829707a44260cb7a2c265f156be8c4c"
 
 [[package]]
 name = "libc"
@@ -117,13 +129,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "efa535d5117d3661134dbf1719b6f0ffe06f2375843b13935db186cd094105eb"
 
 [[package]]
-name = "peroxide"
-version = "0.34.3"
+name = "paste"
+version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e80c3c96c95a300a9b48d84bf4eb05414dd1839de81f901cd544b3dae975317"
+checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
+
+[[package]]
+name = "peroxide"
+version = "0.37.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0a89bd5e5373da993f5bf84c8b4441352c96b7260ff670012bb4c0c61022f6d7"
 dependencies = [
+ "anyhow",
+ "lambert_w",
  "matrixmultiply",
  "order-stat",
+ "paste",
  "peroxide-ad",
  "peroxide-num",
  "puruspe",
@@ -179,7 +200,7 @@ dependencies = [
 
 [[package]]
 name = "radient"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "casey",
  "peroxide",

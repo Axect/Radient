@@ -1,6 +1,6 @@
 [package]
 name = "radient"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Axect <ax2ct@outlook.com>"]
 description = "Radient is a Rust library designed for automatic differentiation. It leverages the power of computational graphs to perform forward and backward passes for gradient calculations."
@@ -14,10 +14,8 @@ exclude = ["src/bin/", "src/main.rs", "src/history/", "examples/"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[dev-dependencies]
-peroxide = "0.34"
 
 [dependencies]
 casey = "0.4"
 peroxide-num = "0.1"
-peroxide = "0.34"
+peroxide = "0.37"
