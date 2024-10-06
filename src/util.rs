@@ -32,7 +32,6 @@ where
     g.reset();
     g.subs_vars(x);
     let result = g.forward();
-    println!("result: {:?}", result);
     g.backward();
     let grads = g.get_gradients();
 

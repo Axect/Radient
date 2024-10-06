@@ -5,12 +5,12 @@ use crate::traits::{ActivationFunction, Matrizable};
 
 #[derive(Default)]
 pub struct Graph<T> {
-    gradients: Vec<T>,
-    buffer: Vec<Option<T>>,
-    nodes: Vec<Node>, // Added to store the nodes
-    value_ics: Vec<usize>,
-    compiled: Option<usize>,
-    topological_order: Option<Vec<usize>>,
+    pub gradients: Vec<T>,
+    pub buffer: Vec<Option<T>>,
+    pub nodes: Vec<Node>, // Added to store the nodes
+    pub value_ics: Vec<usize>,
+    pub compiled: Option<usize>,
+    pub topological_order: Option<Vec<usize>>,
 }
 
 pub enum Node {
@@ -438,11 +438,13 @@ where
         let reverse_order = order.into_iter().rev();
 
         // Initialize gradients
-        let output_index = self.compiled.unwrap();
-        self.gradients[output_index] = self.buffer[output_index]
-            .as_ref()
-            .unwrap()
-            .ones_like();
+        self.gradients.iter_mut()
+            .zip(self.buffer.iter())
+            .for_each(|(grad, val)| {
+                *grad = val.as_ref().unwrap().zeros_like();
+            });
+        let compiled = self.compiled.unwrap();
+        self.gradients[compiled] = self.buffer[compiled].as_ref().unwrap().ones_like();
 
         for index in reverse_order {
             let gradient = self.gradients[index].clone();
@@ -580,13 +582,14 @@ where
         let except_ics = &self.value_ics;
         let reset_ics = (0..self.buffer.len()).filter(|x| !except_ics.contains(x));
 
+        for i in 0 .. self.buffer.len() {
+            self.gradients[i] = match self.buffer[i].as_ref() {
+                Some(x) => x.zeros_like(),
+                None => T::default(),
+            }
+        }
         for i in reset_ics {
             self.buffer[i] = None;
-            self.gradients[i] = T::default();
-        }
-
-        for i in except_ics {
-            self.gradients[*i] = T::default();
         }
     }
 
@@ -726,7 +729,8 @@ where
     }
 
     pub fn compile(&mut self, expr: Expr) {
-        self.compiled = Some(parse_expr(expr, self))
+        self.compiled = Some(parse_expr(expr, self));
+        self.topological_order = None;
     }
 
     pub fn get_compiled(&self) -> Option<usize> {

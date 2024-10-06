@@ -33,5 +33,5 @@ fn f(x_vec: &[Expr]) -> Expr {
     let x = &x_vec[1];
     let B = &x_vec[2];
 
-    &(A * x) + B
+    (&(A * x) + B).sigmoid()
 }
